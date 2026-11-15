@@ -76,6 +76,8 @@ setting you are likely to change is in one block at the top of that file.
 | [`AllInOne/AllInOne.ino`](AllInOne/AllInOne.ino) | **Main race firmware.** Self-checks, reset log, line engine, live tuning, track-map support |
 | `AllInOne/sketch.yaml` | Build options (40 MHz flash) used by `arduino-cli` |
 | `AllInOne/track_map.h` | *(generated, optional)* speed plan from a learning run; not in the repo until you make one |
+| [`versions/AllInOne_v1_before_grout_fix/`](versions/AllInOne_v1_before_grout_fix/AllInOne_v1_before_grout_fix.ino) | Frozen copy of the race firmware **before** the tile-grout (S5) fix |
+| [`versions/AllInOne_v2_grout_fix/`](versions/AllInOne_v2_grout_fix/AllInOne_v2_grout_fix.ino) | Frozen copy of the race firmware **with** the tile-grout fix (same as `AllInOne` right now) |
 | [`TrackLearn/TrackLearn.ino`](TrackLearn/TrackLearn.ino) | **Learning firmware.** Generated from `AllInOne.ino` with `TRACK_LEARN_MODE 1`. Do not edit it directly |
 | [`tools/make_learn_firmware.py`](tools/make_learn_firmware.py) | Regenerates `TrackLearn` from `AllInOne` |
 | [`tools/export_track.py`](tools/export_track.py) | Reads the learned map from the robot and writes `AllInOne/track_map.h` |

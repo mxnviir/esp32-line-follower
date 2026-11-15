@@ -155,6 +155,12 @@ const float CORNER_MEMORY_MM   = 80.0f;
 // treating the loss as a gap. Gaps are only assumed when no outer sensor
 // touched the line recently.
 const float SIDE_MEMORY_MM     = 80.0f;
+// S5 (HW-201) reads anything dark as line, including tile grout, which the
+// BFD sensors can't see. So S5 is only believed when the line was already
+// right of centre: an S5 touch counts for the turn memory only if the line was
+// more than S5_TRUST_MM right of centre, and S5 seeing "line" on its own is
+// ignored while the line was left of S4.
+const float S5_TRUST_MM        = 5.5f;
 // Ending a pivot cleanly (stops overshoot after 90-degree turns):
 //  - keep pivoting until a CENTRE sensor (S2-S4) has the line, at
 //    PIVOT_FIND_FACTOR x pivot speed once only an outer sensor sees it;
@@ -1161,11 +1167,19 @@ void loop() {
   digitalWrite(PIN_LED, ev != EV_NONE);
   trackEvent(ev, false, ev == EV_NONE);
 
+  // S5 on its own while the line was left of S4: almost certainly the floor
+  // (tile grout), not the line. Ignore it.
+  if (USE_S5 && mask == (1 << 4) && lineX < SENSOR_X_MM[3]) {
+    ev = EV_NONE;
+    mask = 0;
+  }
+
   // Remember brief touches of the outermost sensors (raw, unfiltered).
+  // S1 always counts; S5 only when the line was already right of centre.
   const uint8_t leftOuter  = USE_S1 ? (1 << 0) : (1 << 1);
   const uint8_t rightOuter = USE_S5 ? (1 << 4) : (1 << 3);
-  if (rawMask & leftOuter)  leftEdgeSeenMm  = runDistMm;
-  if (rawMask & rightOuter) rightEdgeSeenMm = runDistMm;
+  if (rawMask & leftOuter) leftEdgeSeenMm = runDistMm;
+  if ((rawMask & rightOuter) && (!USE_S5 || lineX > S5_TRUST_MM)) rightEdgeSeenMm = runDistMm;
 
   // 3a. Braking after a pivot: short-brake briefly so the rotation stops.
   if (now < brakeUntilMs) {

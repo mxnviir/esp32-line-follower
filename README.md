@@ -159,7 +159,9 @@ There is **no motor test at boot**; the robot races straight away.
 
 4. **Lost line**, in this order:
    1. **Turn memory:** if an outer sensor (S1 or S5) touched the line within
-      80 mm, even for a single raw reading, pivot toward that side.
+      80 mm, even for a single raw reading, pivot toward that side. S5 only
+      counts if the line was already right of centre, and S5 alone is ignored
+      while the line was left of S4 (the HW-201 sees dark tile grout as line).
    2. **Corner memory:** a corner was seen within 80 mm, so pivot toward it.
    3. **Gap:** the line vanished near the centre running straight, so drive
       straight for up to 60 mm.
@@ -246,6 +248,7 @@ over serial).
 | `JUNCTION_HOLD_MM` | 40 | It turns into side branches after a junction (raise) |
 | `CORNER_MEMORY_MM` | 80 | It misses corners it just saw (raise) |
 | `SIDE_MEMORY_MM` | 80 | It drives straight through turns (raise) or turns wrongly at gaps (lower) |
+| `S5_TRUST_MM` | 5.5 | S5 only counts as a turn hint when the line was this far right of centre (stops tile grout fooling it) |
 | `PIVOT_FIND_FACTOR` | 0.6 | It overshoots after turns (lower) |
 | `PIVOT_BRAKE_MS` | 60 | It keeps rotating after a turn (raise) |
 | `POST_TURN_MM` / `POST_TURN_MAX_CORR` | 60 / 60 | Gentle steering after a pivot |
@@ -383,6 +386,7 @@ tuning around them is wasted effort.
 | **Sensor ghosting / inconsistent switching** | Sensors 41 mm high; glossy electrical tape reflects IR | Lower to about 10 mm, tilt the bar, matte tape |
 | **Left motor intermittent** | Loose wire or connector (works after a power cycle, fails after lifting) | Check AO1/AO2, the motor tab solder joints and the D18/D19/D21 jumpers |
 | **Robot didn't turn at corners** | The outer sensor only touched the line for one reading, which the flicker filter dropped; the loss was then treated as a gap | Fixed: raw outer-sensor touches are remembered (`SIDE_MEMORY_MM`) |
+| **Left 90° turns sometimes turned right** | The HW-201 (S5) reads dark tile grout as line; the BFD board can't see grout. A grout hit under S5 looked like a recent right-side touch, or pulled the robot hard right | Fixed: S5 is only believed when the line was already right of centre. In simulation: 6/24 → 0/24 failures |
 | **Overshoot after 90° turns** | The pivot ended at the first outer sensor while still rotating | Fixed: pivot until a centre sensor sees the line, brake, gentle steering after |
 | **Wheel stalled on turns** | Half power made the inner wheel's PWM too low to turn | Fixed: deadband compensation (`MOTOR_MIN_PWM`) |
 
@@ -409,6 +413,7 @@ tuning around them is wasted effort.
     crash, faster reversing, 40 MHz flash. Added low-current mode for USB power.
 11. Fixed the robot driving straight through turns (outer-sensor memory) and
     the overshoot after 90° turns (pivot exit with braking).
+12. Fixed left turns sometimes going right: tile grout under the HW-201.
 
 The `specs/` folder describes a fuller digital twin, calibration firmware and
 track-run firmware with strict benchmarks; those are designs, not yet built.

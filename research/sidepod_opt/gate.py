@@ -17,7 +17,9 @@ import numpy as np
 HERE = Path(__file__).resolve().parent
 P2 = HERE.parents[1] / "part2-simulation"
 sys.path.insert(0, str(P2)); sys.path.insert(0, str(HERE))
-G = HERE / "gate"; R = HERE / "gate_results"; R.mkdir(parents=True, exist_ok=True)   # small JSON, tracked in git
+G = HERE / "gate"
+R = Path(os.environ.get("GATE_RESULTS", HERE / "gate_results")); R.mkdir(parents=True, exist_ok=True)   # tracked in git
+ADJ = HERE / "gate_results"       # the adjoint was solved here (one machine); other machines judge against it
 ORIG0 = G / "original"            # exact CAD export (state A is solved on this)
 ORIG = G / "original_rm"          # the same surface re-meshed to even 1 mm triangles: zero run, bumps, adjoint
 DOMAIN = ((-0.005, 0.0, 0.0), (0.265, 0.045, 0.066))      # fixed for every car (trial car is 257 mm)
@@ -206,26 +208,25 @@ def latest_run_of(pid):
 
 def adjoint_on_base(base):
     """The adjoint as saved is one value per STL triangle CORNER, each the value of the nearest
-    CFD surface point (openfoam_adjoint.map_sensitivity_to_stl_vertices). Each CFD point is repeated
-    on ~16 corners, so summing over corners counts it ~16 times. Two readings, recovered without
-    re-running:
-      per_point: each CFD point's value is dD/dn for that point's patch of surface; the points are
-                 recovered as the unique values (centroid of their corners) and counted once.
-      density:   the value is dD/dn per unit area; integrated over the STL, vertex area x mean of
-                 its corners.
-    The measured slope says which is right (~1)."""
-    s = np.load(R / "adjoint_sens.npy")
-    nz = s != 0
-    u, inv = np.unique(s[nz], return_inverse=True)
-    corners = base.vertices[base.faces].reshape(-1, 3)
-    cnt = np.bincount(inv)
-    loc = np.stack([np.bincount(inv, weights=corners[nz, d]) / cnt for d in range(3)], 1)
+    CFD surface point (openfoam_adjoint.map_sensitivity_to_stl_vertices): kinematic dD_half/dn per
+    unit AREA (ESI default, includeSurfaceArea false, as Part 3's known-answer check reads it).
+    Per vertex: the mean of its corners (g) and its area (1/3 of its faces). On another machine
+    whose re-meshed original differs, g is taken from the nearest vertex of the adjoint's mesh
+    (adjoint_g.npy + adjoint_verts.npy)."""
+    s = np.load(ADJ / "adjoint_sens.npy")
     vid = base.faces.reshape(-1)
-    g = np.bincount(vid, weights=s, minlength=len(base.vertices)) / np.bincount(vid, minlength=len(base.vertices))
     area = np.bincount(vid, weights=np.repeat(base.area_faces / 3, 3), minlength=len(base.vertices))
+    if len(base.faces) * 3 == len(s) and np.allclose(base.vertices, np.load(ADJ / "adjoint_verts.npy")):
+        g = np.bincount(vid, weights=s, minlength=len(base.vertices)) / np.bincount(vid, minlength=len(base.vertices))
+        if not (ADJ / "adjoint_g.npy").exists():
+            np.save(ADJ / "adjoint_g.npy", g)
+        return g, area
     from scipy.spatial import cKDTree
-    near = cKDTree(base.vertices).query(loc)[1]
-    return u, near, g, area
+    V = np.load(ADJ / "adjoint_verts.npy")
+    d, i = cKDTree(V).query(base.vertices)
+    if np.median(d) > 2e-4:
+        raise SystemExit(f"this original differs from the adjoint's (median {np.median(d)*1e3:.2f} mm)")
+    return np.load(ADJ / "adjoint_g.npy")[i], area
 
 
 def cmd_judge():
@@ -234,29 +235,23 @@ def cmd_judge():
     zero = json.loads((R / "zero.json").read_text())["D20_half_N"]
     base_run = json.loads((R / "base.json").read_text())["D20_half_N"]
     base = trimesh.load(ORIG / "car_half.stl")
-    if len(base.faces) * 3 != len(np.load(R / "adjoint_sens.npy")):
-        raise SystemExit("adjoint corners differ from the bump base mesh")
-    u, near, g, area = adjoint_on_base(base)
+    g, area = adjoint_on_base(base)
     rows = []
     for p in sorted(R.glob("bump_*.json")):
         k = p.stem[5:]
         b = json.loads(p.read_text())
         dn = ((trimesh.load(G / f"bump_{k}" / "car_half.stl").vertices - base.vertices) * base.vertex_normals).sum(1)
         rows.append({"bump": k, "measured_mN": (b["D20_half_N"] - zero) * 1e3,
-                     "pred_per_point_mN": float(1.225 * (u * dn[near]).sum()) * 1e3,
-                     "pred_density_mN": float(1.225 * (g * dn * area).sum()) * 1e3,
+                     "predicted_mN": float(1.225 * (g * dn * area).sum()) * 1e3,
                      "dV_mm3": float((dn * area).sum() * 1e9),
                      "usable": bool(not b["morph_fallback"] and b["converged"])})
     use = [r for r in rows if r["usable"]]
     out = {"zero_minus_base_mN (one noise sample)": (zero - base_run) * 1e3, "rows": rows}
     if len(use) >= 3:
-        m = np.array([r["measured_mN"] for r in use])
-        for key in ("pred_per_point_mN", "pred_density_mN"):
-            pr = np.array([r[key] for r in use])
-            rr = float(np.corrcoef(m, pr)[0, 1]); sg = (np.sign(m) == np.sign(pr))
-            out[key.replace("_mN", "")] = {"pearson_r": rr, "signs": f"{int(sg.sum())}/{len(use)}",
-                                         "slope_measured_per_predicted": float((m @ pr) / (pr @ pr)),
-                                         "passed": bool(rr >= 0.9 and sg.mean() >= 0.9)}
+        m = np.array([r["measured_mN"] for r in use]); pr = np.array([r["predicted_mN"] for r in use])
+        rr = float(np.corrcoef(m, pr)[0, 1]); sg = (np.sign(m) == np.sign(pr))
+        out.update(pearson_r=rr, signs=f"{int(sg.sum())}/{len(use)}", slope_measured_per_predicted=float((m @ pr) / (pr @ pr)),
+                   passed=bool(rr >= 0.9 and sg.mean() >= 0.9))
     (R / "judge.json").write_text(json.dumps(out, indent=1))
     print(json.dumps(out, indent=1))
 

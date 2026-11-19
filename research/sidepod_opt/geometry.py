@@ -1,24 +1,29 @@
-"""Design -> legal, milled body -> CFD car folder. Everything at 1 mm on the STEP's own grid.
+"""Design -> legal, milled sidepod -> exact, watertight car for CFD.
 
 Frames
   STEP frame  x forward (nose at +x), y left, z up, mm  -- the team's CAD.
-  car frame   x from the nose tip towards the tail, z up from the track, m -- Parts 2/4, OpenFOAM
-              (flow along +x). x_car = (x_nose - x_step) / 1000.
+  car frame   x from the nose tip towards the tail, z up from the track, m -- Parts 2/4 and
+              OpenFOAM (flow along +x). x_car = (x_nose - x_step) / 1000.
 
-A design is a FIELD over the sidepod region (positive = foam). Representations (methods.py) only
-make fields; everything below is shared, so every method is judged on the same body:
-  finish   rule zones forced to air, cargo forced to foam, spine/halo zone copied from the STEP
-  mill     Part 1's machining rule (team: 3-axis, 6.35 mm ball end, setups top/bottom/left/right):
-           air the ball can't clear stays foam; sealed voids stay foam; loose pieces are not made
-  check    one piece, no voids, nothing changed outside the region, rule zones clear
-  weigh    exact foam mass and COM; lead in the T1.22 container brings a light car to the floor
-  export   watertight half-car STL (solid `car`) + wheels + assembly.json + mass_report.json
+What is exact and what is designed
+  * Everything outside the sidepod region is the team's CAD: the STEP body tessellated from its
+    B-rep (cadio.tessellate), minus the region solid by an exact Boolean (manifold3d).
+  * Wheels are the STEP's own solids (28.24 mm), sunk 0.3 mm into the road as Part 4 does.
+  * Only inside the region is the shape designed. A method's field is turned into a body on a
+    0.5 mm grid (crop around the region, full width and height), milled with Part 1's rule,
+    checked, re-surfaced (marching cubes), clipped to the region solid and unioned with the exact
+    CAD. The final mesh must pass cadio.accept (watertight, coherent winding, manifold).
+  * Mass and COM come from the final meshes, not voxels.
+
+Checks before a car may be timed (Car.check): one piece; nothing changed outside the region;
+no foam in forced air; cargo inside; T3.7 clearance; foam walls >= 3 mm (team milling limit);
+no sealed voids. A car that fails is never meshed for CFD.
 """
 from __future__ import annotations
 
 import json
 import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
@@ -26,18 +31,21 @@ from scipy import ndimage
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
+sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(REPO / "part1-simulation"))
+import cadio as CI  # noqa: E402
 import machining as MC  # noqa: E402  (Part 1: the team's milling rule)
 
 FOAM_G_CM3 = 0.163
 LEAD_G_CM3 = 11.34
-WHEEL_SINK_MM = 0.3                  # as Part 4 assembly.SINK_MM: a clean wheel/road contact for snappy
+WHEEL_SINK_MM = 0.3                  # Part 4 assembly.SINK_MM
+MIN_FOAM_WALL_MM = 3.0               # Part 5 rules_constants.MACHINED_MIN_WALL_MM (team)
 
 
 @dataclass
 class CarSpec:
     """Everything about the car that is not the sidepod. Defaults: the trial car STEP."""
-    step: str = str(REPO / "research/sidepod_region/cad/trial_car.step")
+    step: str = str(HERE / "cad/trial_car.step")
     body_solid: str = "car_body"
     wheel_solids: tuple = ("wheel_fl", "wheel_rl", "wheel_fr", "wheel_lr")
     x_nose_mm: float = 228.625
@@ -50,13 +58,13 @@ class CarSpec:
     region_x: tuple = (49.4, 159.1)
     region_ymax: float = 32.5            # T1.14 block half-width
     region_z: tuple = (1.5, 40.0)        # T3.7 clearance .. deck
-    spine_y: float = 13.5                # |y| <= this and z >= spine_z: deck, cockpit, halo (locked)
+    spine_y: float = 13.5                # |y| <= this and z >= spine_z: deck, cockpit, halo (locked, air too)
     spine_z: float = 17.0
     halo_x0: float = 115.0               # T4.4.2: nothing above halo_zmin from here forward
     halo_zmin: float = 27.0
     cargo_x: tuple = (76.0, 136.0)       # T4.2 wedge, wide end (55 mm) forward
     cargo_z: tuple = (17.0, 27.0)        # ASSUMED: confirm with the team
-    # mass (ASSUMED where the STEP is silent)
+    # mass (ASSUMED where the STEP is silent; see README)
     floor_g: float = 48.2                # T3.6 48.0 + 0.2 margin; no upper limit
     lead_xz: tuple = (130.0, 21.0)       # T1.22 container under the halo, STEP frame
     lead_cap_cm3: float = 1.39
@@ -70,23 +78,38 @@ class CarSpec:
 
 
 class Car:
-    """The car on a 1 mm grid with the region, rule zones and locks."""
-
-    def __init__(self, spec: CarSpec = CarSpec(), h: float = 1.0, cache: Path | None = None):
+    def __init__(self, spec: CarSpec = CarSpec(), h: float = 0.5, cache: Path | None = None):
+        import trimesh
         self.s, self.h = spec, h
-        cache = cache or HERE / "cache" / f"vox_{h:g}mm.npz"
-        if not cache.exists():
-            cache.parent.mkdir(parents=True, exist_ok=True)
-            _voxelize_step(spec, h, cache)
-        d = np.load(cache)
-        self.xs, self.ys, self.zs = d["xs"], d["ys"], d["zs"]
-        self.body0 = d[spec.body_solid]
-        self.wheels = np.zeros_like(self.body0)
-        for w in spec.wheel_solids:
-            self.wheels |= d[w]
-        X, Y, Z = np.meshgrid(self.xs, self.ys, self.zs, indexing="ij")
-        self.X, self.Y, self.Z, AY = X, Y, Z, np.abs(Y)
+        cache = Path(cache or HERE / "cache")
+        cache.mkdir(parents=True, exist_ok=True)
         s = spec
+        # ---- exact CAD (cached as STL, mm, STEP frame)
+        names = (s.body_solid,) + tuple(s.wheel_solids)
+        if not all((cache / f"exact_{n}.stl").exists() for n in names):
+            solids = CI.read_step_solids(s.step)
+            for n in names:
+                sol = CI.outer_solid(solids[n]) if n == s.body_solid else solids[n]
+                CI.tessellate(sol).export(cache / f"exact_{n}.stl")
+        self.body_mesh = trimesh.load(cache / f"exact_{s.body_solid}.stl")
+        self.wheel_meshes = {n: trimesh.load(cache / f"exact_{n}.stl") for n in s.wheel_solids}
+        for m in [self.body_mesh, *self.wheel_meshes.values()]:
+            CI.accept(m)
+        # ---- design grid: crop in x around the region, full width and height
+        x0, x1 = s.region_x[0] - 6.0, s.region_x[1] + 6.0
+        ym = float(np.ceil(max(abs(self.body_mesh.bounds[:, 1]).max(), s.region_ymax) + 4.0))
+        self.xs = np.arange(x0, x1, h) + h / 2
+        self.ys = np.arange(-ym, ym, h) + h / 2
+        self.zs = np.arange(0.0, float(np.ceil(self.body_mesh.bounds[1, 2] + 4.0)), h) + h / 2
+        vp = cache / f"crop_{h:g}mm.npz"
+        if vp.exists():
+            self.body0 = np.load(vp)["body0"]
+        else:
+            self.body0 = CI.voxelize(self.body_mesh, self.xs, self.ys, self.zs)
+            np.savez_compressed(vp, body0=self.body0)
+        X, Y, Z = np.meshgrid(self.xs, self.ys, self.zs, indexing="ij")
+        self.X, self.Y, self.Z = X, Y, Z
+        AY = np.abs(Y)
         box = ((X >= s.region_x[0]) & (X <= s.region_x[1]) & (AY <= s.region_ymax)
                & (Z - h / 2 >= s.region_z[0]) & (Z + h / 2 <= s.region_z[1]))
         dy = np.clip(AY - s.front_inner_y, 0, None)
@@ -102,35 +125,68 @@ class Car:
                       & (Z >= s.cargo_z[0]) & (Z <= s.cargo_z[1]))
         self.forced_air = (t792 | t793 | halo) & box & ~self.spine_zone
         self.region = box & ~self.forced_air & ~self.spine_zone
-        self.keep = self.body0 & ~self.region                    # never touched
-        self.original_pod = self.body0 & self.region
-        # signed distance of the original pod (mm, + inside) and of "nothing" (lean): field seeds
+        self.keep = self.body0 & ~self.region
         din = ndimage.distance_transform_edt(self.body0) * h
         dout = ndimage.distance_transform_edt(~self.body0) * h
         self.sdf_original = np.where(self.body0, din, -dout).astype(np.float32)
-        dcar = ndimage.distance_transform_edt(~self.cargo) * h
-        self.sdf_lean = (-dcar).astype(np.float32)
-        # mass bookkeeping
-        self.foam0_g = self.body0.sum() * h ** 3 * 1e-3 * FOAM_G_CM3
-        self.other_g = s.other_parts_g if s.other_parts_g is not None else s.floor_g - self.foam0_g
-        self.other_xz = s.other_parts_xz or (0.5 * (s.x_front_axle + s.x_rear_axle), 16.0)
-        # normalised coordinates for representations
+        self.sdf_lean = (-(ndimage.distance_transform_edt(~self.cargo) * h)).astype(np.float32)
         lo = np.array([s.region_x[0], 0.0, s.region_z[0]]); hi = np.array([s.region_x[1], s.region_ymax, s.region_z[1]])
         self.norm = np.stack([(X - (lo[0] + hi[0]) / 2) / ((hi[0] - lo[0]) / 2), AY / hi[1],
                               (Z - (lo[2] + hi[2]) / 2) / ((hi[2] - lo[2]) / 2)], -1).astype(np.float32)
         w = np.argwhere(self.region)
         self.rlo, self.rhi = w.min(0), w.max(0) + 1
+        # ---- exact solids for the Booleans
+        self.region_M = self._region_manifold()
+        self.body_M = CI.to_manifold(self.body_mesh)
+        self.kept_M = self.body_M - self.region_M
+        # ---- mass bookkeeping (body foam from the exact mesh)
+        self.foam0_g = self.body_mesh.volume * 1e-3 * FOAM_G_CM3
+        self.other_g = s.other_parts_g if s.other_parts_g is not None else s.floor_g - self.foam0_g
+        self.other_xz = s.other_parts_xz or (0.5 * (s.x_front_axle + s.x_rear_axle), 16.0)
 
-    # ------------------------------------------------------------------ design -> body
+    # ------------------------------------------------------------------ exact region solid
+    def _region_manifold(self):
+        """Box minus the T7.9.2 / T7.9.3 wedges, the halo cap and the spine zone, both sides,
+        built from exact prisms (STEP frame, mm). Same rules as the voxel masks above."""
+        import manifold3d as mf
+        s = self.s
+        big = 200.0
+
+        def box(x0, x1, y0, y1, z0, z1):
+            return mf.Manifold.cube([x1 - x0, y1 - y0, z1 - z0]).translate([x0, y0, z0])
+
+        def prism_xy(poly, z0, z1):                                 # polygon in (x, y), extruded in z
+            return mf.Manifold.extrude(mf.CrossSection([poly]), z1 - z0).translate([0, 0, z0])
+        R = box(s.region_x[0], s.region_x[1], -s.region_ymax, s.region_ymax, s.region_z[0], s.region_z[1])
+        cut = []
+        t60 = 1.0 / np.tan(np.radians(60))
+        xf = s.x_front_axle - s.r_wheel - 15.0
+        for sg in (1, -1):
+            yi = sg * s.front_inner_y
+            yo = sg * (s.front_inner_y + 60.0)
+            poly = [[s.x_front_axle, yi], [xf, yi], [xf - 60.0 * t60, yo], [s.x_front_axle, yo]]
+            cut.append(prism_xy(poly if sg > 0 else poly[::-1], -1, 60))
+            yi = sg * s.rear_inner_y
+            yo = sg * (s.rear_inner_y + 60.0)
+            xr = s.x_rear_axle + s.r_wheel + 5.0
+            poly = [[s.x_rear_axle, yi], [s.x_rear_axle, yo], [xr + 60.0, yo], [xr, yi]]
+            cut.append(prism_xy(poly if sg > 0 else poly[::-1], -1, 60))
+        cut.append(box(s.halo_x0, big, -big, big, s.halo_zmin, big))
+        cut.append(box(-big, big, -s.spine_y, s.spine_y, s.spine_z, big))
+        for c in cut:
+            R = R - c
+        return R
+
+    # ------------------------------------------------------------------ design -> body (voxels)
     def finish(self, field_mm: np.ndarray) -> np.ndarray:
-        """Field (mm, + = foam, full 1 mm grid; mirrored by the caller) -> body before milling."""
         f = 0.5 * (field_mm + field_mm[:, ::-1])                  # symmetric car
         return self.keep | (f > 0) & self.region | self.cargo
 
     def mill(self, B: np.ndarray) -> tuple[np.ndarray, dict]:
         rep = {"uncut_foam_mm3": 0.0}
+        r = MC.TOOL_R_MM / self.h
         for _ in range(3):
-            stuck = ~B & ~MC.reachable_air(~B, MC.TOOL_R_MM / self.h) & self.region
+            stuck = ~B & ~MC.reachable_air(~B, r) & self.region
             n = int(stuck.sum())
             if not n:
                 break
@@ -139,120 +195,125 @@ class Car:
         filled = ndimage.binary_fill_holes(B)
         rep["sealed_voids_mm3"] = float(((filled & ~B) & self.region).sum() * self.h ** 3)
         B = B | (filled & self.region)
-        lab, n = ndimage.label(B)
+        lab, _ = ndimage.label(B)
         keep = np.unique(lab[self.keep & B]); keep = keep[keep > 0]
         loose = B & ~np.isin(lab, keep)
         rep["loose_dropped_mm3"] = float(loose.sum() * self.h ** 3)
-        B = B & ~loose
-        B = np.where(self.region | self.cargo, B, self.body0)    # outside the region: the STEP, exactly
-        B = B | self.cargo
+        B = (B & ~loose) | self.cargo
+        B = np.where(self.region | self.cargo, B, self.body0)
         return B, rep
 
+    def thin_foam_mm3(self, B):
+        """Foam in the region thinner than the team's 3 mm wall: what an opening by a 1.5 mm ball
+        removes, ignoring the outermost cell (corners of the voxel staircase)."""
+        rr = MIN_FOAM_WALL_MM / 2 / self.h
+        k = np.arange(-int(np.ceil(rr)), int(np.ceil(rr)) + 1)
+        ball = (k[:, None, None] ** 2 + k[None, :, None] ** 2 + k[None, None, :] ** 2) <= rr * rr
+        op = ndimage.binary_opening(B, ball)
+        thin = B & self.region & ~op & (ndimage.distance_transform_edt(~op) > 1.0)
+        return float(thin.sum() * self.h ** 3)
+
     def check(self, B: np.ndarray) -> dict:
-        """Gates every evaluated car must pass (the CFD never sees a car that fails one)."""
         lab, n = ndimage.label(B)
+        pod = B & self.region
         out = {"pieces": int(n),
                "changed_outside_region_mm3": float(((B ^ self.body0) & ~self.region & ~self.cargo).sum() * self.h ** 3),
                "foam_in_forced_air_mm3": float((B & self.forced_air).sum() * self.h ** 3),
-               "cargo_inside": bool((B[self.cargo]).all()),
-               "track_clearance_mm": float(self.Z[B & self.region].min() - self.h / 2) if (B & self.region).any() else None}
+               "cargo_inside": bool(B[self.cargo].all()),
+               "track_clearance_mm": float(self.Z[pod].min() - self.h / 2) if pod.any() else None,
+               "thin_foam_mm3": self.thin_foam_mm3(B)}
         out["ok"] = (n == 1 and out["changed_outside_region_mm3"] == 0 and out["foam_in_forced_air_mm3"] == 0
-                     and out["cargo_inside"] and (out["track_clearance_mm"] is None or out["track_clearance_mm"] >= 1.5))
+                     and out["cargo_inside"] and (out["track_clearance_mm"] is None or out["track_clearance_mm"] >= 1.5)
+                     and out["thin_foam_mm3"] <= 30.0)
         return out
 
-    def mass(self, B: np.ndarray) -> dict:
+    # ------------------------------------------------------------------ voxels -> exact mesh
+    def body_mesh_for(self, B: np.ndarray, original: bool = False):
+        """The car body as an exact, watertight mesh (STEP frame, mm): the CAD outside the region,
+        the designed surface inside it."""
+        if original:
+            return self.body_mesh.copy()
+        import trimesh
+        from skimage import measure
+        P = np.pad(B.astype(np.float32), 2)
+        P = ndimage.gaussian_filter(P, 0.7)
+        v, f, _n, _ = measure.marching_cubes(P, 0.5)
+        h = self.h
+        v = np.c_[self.xs[0] + (v[:, 0] - 2) * h, self.ys[0] + (v[:, 1] - 2) * h, self.zs[0] + (v[:, 2] - 2) * h]
+        m = trimesh.Trimesh(v, f, process=True)
+        if m.volume < 0:
+            m.invert()
+        if not m.is_watertight:
+            m = CI.repair(m)
+        pod_M = CI.to_manifold(m) ^ self.region_M                  # ^ = intersection in manifold3d
+        out = CI.from_manifold(self.kept_M + pod_M)
+        CI.accept(out, name="designed body")
+        return out
+
+    def mass(self, body_mesh) -> dict:
         s = self.s
-        foam = B.sum() * self.h ** 3 * 1e-3 * FOAM_G_CM3
+        foam = body_mesh.volume * 1e-3 * FOAM_G_CM3
         lead = max(0.0, s.floor_g - self.other_g - foam)
         legal = lead <= s.lead_cap_cm3 * LEAD_G_CM3
         car = foam + self.other_g + lead
-        fx, fz = self.X[B].mean(), self.Z[B].mean()
-        mx = foam * fx + self.other_g * self.other_xz[0] + lead * s.lead_xz[0]
-        mz = foam * fz + self.other_g * self.other_xz[1] + lead * s.lead_xz[1]
-        # Part 2's race model: car weight INCLUDES the empty cartridge shell at the cartridge centre
-        cx = s.tail_x - s.cartridge_out_mm + 32.5
+        c = body_mesh.center_mass
+        mx = foam * c[0] + self.other_g * self.other_xz[0] + lead * s.lead_xz[0]
+        mz = foam * c[2] + self.other_g * self.other_xz[1] + lead * s.lead_xz[1]
+        cx = s.tail_x - s.cartridge_out_mm + 32.5                   # cartridge centre
         tot = car + s.cartridge_shell_g
         mx = (mx + s.cartridge_shell_g * cx) / tot
         mz = (mz + s.cartridge_shell_g * s.thrust_z) / tot
-        return dict(foam_g=foam, lead_g=lead, car_g=car, legal=bool(legal), race_mass_g=tot,
-                    com_x_car_mm=s.x_nose_mm - mx, com_z_mm=mz)
+        return dict(foam_g=float(foam), lead_g=float(lead), car_g=float(car), legal=bool(legal), race_mass_g=float(tot),
+                    com_x_car_mm=float(s.x_nose_mm - mx), com_z_mm=float(mz))
 
-    def build(self, field_mm: np.ndarray) -> dict:
+    def build(self, field_mm: np.ndarray, original: bool = False) -> dict:
+        """Field -> milled voxels -> checks; the exact mesh and mass only for a car that passes."""
         B, rep = self.mill(self.finish(field_mm))
         chk = self.check(B)
-        return dict(body=B, mill=rep, check=chk, mass=self.mass(B))
+        out = dict(voxels=B, mill=rep, check=chk, mesh=None, mass=None)
+        if chk["ok"]:
+            out["mesh"] = self.body_mesh_for(B, original)
+            out["mass"] = self.mass(out["mesh"])
+        return out
 
     # ------------------------------------------------------------------ export for CFD
-    def export_car_folder(self, B: np.ndarray, out: Path, label: str = "") -> Path:
-        """Folder Part 2's stopwatch / any OpenFOAM or SimScale run can time:
-        car_half.stl (solid `car`, m, car frame, y >= 0, closed at y = 0), wheelF/wheelR.stl,
-        assembly.json (rotating wheels), mass_report.json, body_full.stl (whole body, for SimScale
-        and the CNC)."""
-        import trimesh
+    def to_car_frame(self, m):
+        """STEP frame (mm) -> car frame (m): x from the nose tip, flow along +x. A mirror, so the
+        winding is flipped back to keep normals outward."""
+        t = m.copy()
+        T = np.diag([-1e-3, 1e-3, 1e-3, 1.0]); T[0, 3] = self.s.x_nose_mm * 1e-3
+        t.apply_transform(T)
+        if t.volume < 0:
+            t.invert()
+        return t
+
+    def export_car_folder(self, body_mesh, out: Path, label: str = "") -> Path:
+        """Part 2 stopwatch folder: car_half.stl (solid `car`, m, car frame, y >= 0, closed exactly
+        at y = 0 by a Boolean), wheelF/wheelR.stl (exact, sunk 0.3 mm), assembly.json (rotating
+        wheels), mass_report.json; body_full.stl (whole body, solid `car`, for SimScale / the CNC)."""
+        import manifold3d as mf
         out = Path(out); out.mkdir(parents=True, exist_ok=True)
-        half = self._surface(B, half=True)
-        half.export(out / "car_half_raw.stl")
-        _write_named_ascii(half, out / "car_half.stl", "car")
-        _write_named_ascii(self._surface(B, half=False), out / "body_full.stl", "car")
         s = self.s
+        full = self.to_car_frame(body_mesh)
+        CI.accept(full, body_mesh.volume * 1e-9, name="body (car frame)")
+        half = CI.from_manifold(CI.to_manifold(full) ^ mf.Manifold.cube([1.0, 1.0, 1.0]).translate([-0.5, 0.0, -0.5]))
+        CI.accept(half, full.volume / 2, tol=0.002, name="half body")
+        CI.write_ascii_named(half, out / "car_half.stl", "car")
+        CI.write_ascii_named(full, out / "body_full.stl", "car")
         omega = -s.speed_mps / (s.r_wheel / 1e3)
         surfaces = []
-        for name, xa in (("wheelF", s.x_front_axle), ("wheelR", s.x_rear_axle)):
-            m = self._surface(self.wheels & (np.abs(self.X - xa) < s.r_wheel + 3), half=True, smooth=False)
-            m.apply_translation([0, 0, -WHEEL_SINK_MM / 1e3])     # Part 4: wheels sunk into the road
-            _write_named_ascii(m, out / f"{name}.stl", name)
-            yc = (s.front_inner_y if name == "wheelF" else s.rear_inner_y) + 8.6
+        for name, solid in (("wheelF", "wheel_fl"), ("wheelR", "wheel_rl")):      # the +y wheels
+            w = self.to_car_frame(self.wheel_meshes[solid])
+            w.apply_translation([0, 0, -WHEEL_SINK_MM / 1e3])
+            CI.accept(w, name=name)
+            CI.write_ascii_named(w, out / f"{name}.stl", name)
+            c = w.bounds.mean(0)
             surfaces.append({"name": name, "stl": f"{name}.stl", "rotating": {
-                "origin": [(s.x_nose_mm - xa) / 1e3, yc / 1e3, (s.r_wheel - WHEEL_SINK_MM) / 1e3], "axis": [0, 1, 0], "omega": omega}})
+                "origin": [float(c[0]), float(c[1]), float(s.r_wheel - WHEEL_SINK_MM) / 1e3], "axis": [0, 1, 0], "omega": omega}})
         (out / "assembly.json").write_text(json.dumps({"extra_surfaces": surfaces, "label": label}, indent=1))
-        m = self.mass(B)
+        m = self.mass(body_mesh)
         (out / "mass_report.json").write_text(json.dumps({
             "car_weight_kg": m["race_mass_g"] / 1e3, "com_mm": [m["com_x_car_mm"], 0.0, m["com_z_mm"]],
             "foam_g": m["foam_g"], "lead_g": m["lead_g"], "car_without_cartridge_g": m["car_g"],
-            "note": "sidepod_opt: exact foam from the milled 1 mm body; other parts ASSUMED (see CarSpec)"}, indent=1))
+            "note": "sidepod_opt: foam from the exact body mesh; other parts ASSUMED (see CarSpec)"}, indent=1))
         return out
-
-    def _surface(self, M, half=True, smooth=True):
-        import trimesh
-        from skimage import measure
-        j0 = np.searchsorted(self.ys, 0.0)
-        A = M[:, j0:] if half else M
-        ys = self.ys[j0:] if half else self.ys
-        P = np.pad(A.astype(np.float32), 2)
-        if half:
-            P[:, :2, :] = 0.0                                     # closed at the symmetry plane
-        if smooth:
-            P = ndimage.gaussian_filter(P, 0.6)
-        v, f, _n, _ = measure.marching_cubes(P, 0.5)
-        h = self.h
-        x = self.xs[0] + (v[:, 0] - 2) * h
-        y = ys[0] + (v[:, 1] - 2) * h
-        z = self.zs[0] + (v[:, 2] - 2) * h
-        if half:
-            y = np.where(y < ys[0] - h / 2, 0.0, y)               # the closing face sits on y = 0
-            y = np.maximum(y, 0.0)
-        verts = np.c_[(self.s.x_nose_mm - x) / 1e3, y / 1e3, np.maximum(z, 0.0) / 1e3]
-        m = trimesh.Trimesh(verts, f[:, ::-1], process=True)       # x flipped: keep normals outward
-        m.merge_vertices(); m.update_faces(m.nondegenerate_faces()); m.remove_unreferenced_vertices()
-        if smooth:
-            trimesh.smoothing.filter_taubin(m, iterations=6)
-            if half:
-                v = m.vertices.copy(); v[:, 1] = np.where(v[:, 1] < 2e-4, np.maximum(v[:, 1], 0.0), v[:, 1])
-                v[v[:, 1] < 5e-5, 1] = 0.0; m.vertices = v
-        trimesh.repair.fix_normals(m)
-        return m
-
-
-def _write_named_ascii(mesh, path: Path, name: str):
-    import trimesh
-    txt = trimesh.exchange.stl.export_stl_ascii(mesh)
-    lines = txt.splitlines()
-    lines[0] = f"solid {name}"; lines[-1] = f"endsolid {name}"
-    path.write_text("\n".join(lines) + "\n")
-
-
-def _voxelize_step(spec: CarSpec, h: float, out: Path):
-    """STEP -> tessellate -> 3-axis ray-parity voxels (survives small seams)."""
-    sys.path.append(str(REPO / "research/sidepod_region"))
-    import step_vox
-    step_vox.voxelize(spec.step, h, out)

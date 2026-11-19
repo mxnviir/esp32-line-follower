@@ -1,1 +1,0 @@
-gate.py bump nose_top

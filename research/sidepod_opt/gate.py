@@ -339,9 +339,12 @@ def run_stderr_mN(name, rec_):
     from openfoam_case import force_mean_convergence
     f = R / "forces" / name / "forces.dat"
     if not f.exists():
-        for jt in (R / "forces").glob("run_*/job.txt"):        # saved live by gate_forcesaver.sh
+        for jt in (G / "forces_live").glob("run_*/job.txt"):   # saved live by gate_forcesaver.sh
             if jt.read_text().split()[-1:] == [name[5:]] and (jt.parent / "forces.dat").exists():
-                f = jt.parent / "forces.dat"
+                f.parent.mkdir(parents=True, exist_ok=True)
+                for x in ("forces.dat", "forces_car.dat"):
+                    if (jt.parent / x).exists():
+                        shutil.copy(jt.parent / x, f.parent / x)
     if not f.exists():
         return None
     return float(force_mean_convergence(f.read_text())[0]) * rec_["D20_half_N"] * 1e3

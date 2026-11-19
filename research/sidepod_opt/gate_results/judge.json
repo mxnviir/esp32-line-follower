@@ -1,8 +1,31 @@
 {
  "zero_minus_base_mN (fresh mesh vs morph path)": 0.3694160865474194,
  "zero_stderr_mN": null,
+ "null_minus_zero_mN (second zero sample)": {
+  "null_pod_front": -0.04944026803688217
+ },
  "pairs": [],
  "rows": [
+  {
+   "bump": "nose_top",
+   "site": "nose_top",
+   "amp_mm": 1.0,
+   "measured_mN": -0.009536947193522494,
+   "predicted_mN": 0.08860692436568801,
+   "stderr_mN": 0.2083219066951557,
+   "dV_mm3": 242.30392039429867,
+   "usable": true
+  },
+  {
+   "bump": "null_pod_front",
+   "site": "pod_front",
+   "amp_mm": 0.02,
+   "measured_mN": -0.04944026803688217,
+   "predicted_mN": 0.006146886245112589,
+   "stderr_mN": 0.19966157464396608,
+   "dV_mm3": 8.102903680302513,
+   "usable": true
+  },
   {
    "bump": "pod_front_low",
    "site": "pod_front_low",
@@ -23,5 +46,10 @@
    "dV_mm3": 378.9506425587469,
    "usable": true
   }
- ]
+ ],
+ "pearson_r": 0.9176628786882906,
+ "signs": "0/3",
+ "slope_measured_per_predicted": -3.6749988435892273,
+ "passed_part3_marks": false,
+ "note": "signs and slope depend on the single zero run; the pairs do not"
 }

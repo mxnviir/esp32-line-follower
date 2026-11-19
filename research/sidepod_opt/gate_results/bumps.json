@@ -86,5 +86,25 @@
   "dV_expected_mm3": 321.3928710931679,
   "moved_vertices": 2487,
   "max_move_mm": 1.0
+ },
+ "null_pod_front": {
+  "site": "pod_front",
+  "amp_mm": 0.02,
+  "dV_mm3": 7.946952994305318
+ },
+ "nose_side_h": {
+  "site": "nose_side",
+  "amp_mm": 0.5,
+  "dV_mm3": 148.66250644687773
+ },
+ "pod_front_m": {
+  "site": "pod_front",
+  "amp_mm": -1.0,
+  "dV_mm3": -391.3459575857569
+ },
+ "pod_front_low_m": {
+  "site": "pod_front_low",
+  "amp_mm": -1.0,
+  "dV_mm3": -378.63514332259524
  }
 }

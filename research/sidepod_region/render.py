@@ -44,7 +44,7 @@ def region_masks_1mm():
     t792 = (Y >= RG.FRONT_INNER_Y) & (X >= RG.X_FRONT_AXLE - RG.R_WHEEL - (15 + dy / np.tan(np.radians(60)))) & (X <= RG.X_FRONT_AXLE)
     dy = np.clip(Y - RG.REAR_INNER_Y, 0, None)
     t793 = (Y >= RG.REAR_INNER_Y) & (X <= RG.X_REAR_AXLE + RG.R_WHEEL + 5 + dy) & (X >= RG.X_REAR_AXLE)
-    spine = body & (Y <= RG.SPINE_Y) & (Z >= RG.SPINE_Z)
+    spine = (Y <= RG.SPINE_Y) & (Z >= RG.SPINE_Z)
     hw = 5.0 + (X - RG.CARGO_X[0]) / (RG.CARGO_X[1] - RG.CARGO_X[0]) * 22.5
     cargo = (X >= RG.CARGO_X[0]) & (X <= RG.CARGO_X[1]) & (Y <= hw) & (Z >= RG.CARGO_Z[0]) & (Z <= RG.CARGO_Z[1])
     halo = (X >= RG.HALO_X[0]) & (Z > RG.HALO_ZMIN)
@@ -52,7 +52,7 @@ def region_masks_1mm():
     zones = (t792 | t793) & (Z <= 40)
     o = (xs[0] - 0.5, ys[0] - 0.5, zs[0] - 0.5)
     return dict(origin=o, body=body, wheels=wheels, region=region, cargo=cargo, zones=zones,
-                kept=body & ~box | spine)
+                kept=body & ~box | (body & spine))
 
 
 def region_figure(path):

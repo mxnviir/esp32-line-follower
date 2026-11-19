@@ -73,11 +73,12 @@ class Car:
         dy = np.clip(Y - REAR_INNER_Y, 0, None)
         t793 = (Y >= REAR_INNER_Y) & (X <= xr_front_face + (5.0 + dy)) & (X >= X_REAR_AXLE)
         self.forbid = (t792 | t793 | halo_side) & box
-        self.spine = self.body & (Y <= SPINE_Y) & (Z >= SPINE_Z)
+        self.spine_zone = (Y <= SPINE_Y) & (Z >= SPINE_Z)      # deck, cockpit, halo pocket: solid AND air locked
+        self.spine = self.body & self.spine_zone
         half_w = 5.0 + (X - CARGO_X[0]) / (CARGO_X[1] - CARGO_X[0]) * (27.5 - 5.0)
         self.cargo = ((X >= CARGO_X[0]) & (X <= CARGO_X[1]) & (Y <= half_w)
                       & (Z >= CARGO_Z[0]) & (Z <= CARGO_Z[1]))
-        self.region = box & ~self.forbid & ~self.spine          # cells a method may choose
+        self.region = box & ~self.forbid & ~self.spine_zone     # cells a method may choose
         fixed = (self.body & ~box) | (self.spine & box)         # original body kept as is
         lab, n = ndimage.label(fixed)                           # drop 3 mm-coarsening crumbs
         big = np.argmax(ndimage.sum(fixed, lab, range(1, n + 1))) + 1
@@ -101,6 +102,7 @@ class Car:
         s = (ndimage.binary_closing(s, iterations=tool_cells) & self.region) | self.must
         s = ndimage.binary_opening(s, iterations=tool_cells) | self.must
         body = (s & self.region) | self.fixed | self.must
+        body = np.where(self.spine_zone, self.original, body)   # the halo/cockpit interface is never touched
         lab, n = ndimage.label(body)
         ids = set(np.unique(lab[self.fixed])) - {0}
         if len(ids) != 1 or not (lab[self.must] == next(iter(ids))).all():

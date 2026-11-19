@@ -32,7 +32,8 @@ SPINE = BODY1 & (AY <= RG.SPINE_Y) & (Z1 >= RG.SPINE_Z)
 _hw = 5.0 + (X1 - RG.CARGO_X[0]) / (RG.CARGO_X[1] - RG.CARGO_X[0]) * 22.5
 CARGO = ((X1 >= RG.CARGO_X[0]) & (X1 <= RG.CARGO_X[1]) & (AY <= _hw)
          & (Z1 >= RG.CARGO_Z[0]) & (Z1 <= RG.CARGO_Z[1]))
-REGION = BOX & ~T792 & ~T793 & ~HALO & ~SPINE
+SPINE_ZONE = (AY <= RG.SPINE_Y) & (Z1 >= RG.SPINE_Z)            # solid AND air locked
+REGION = BOX & ~T792 & ~T793 & ~HALO & ~SPINE_ZONE
 KEEP = BODY1 & ~REGION                                          # trial body outside the region
 
 
@@ -63,6 +64,7 @@ def mill(car, half):
     lab, _ = ndimage.label(B)
     keep = np.unique(lab[SPINE & B]); keep = keep[keep > 0]
     B = np.isin(lab, keep)                                      # anything loose is not made
+    B = np.where(SPINE_ZONE, BODY1, B)                          # halo/cockpit interface exactly as drawn
     return B, dict(uncut_foam_mm3=added)
 
 

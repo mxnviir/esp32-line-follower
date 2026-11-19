@@ -54,7 +54,8 @@ def rec(half, health, secs, **more):
     d = {"D20_half_N": float(half.D20), "wall_s": round(secs, 1),
          "converged": bool(health.converged), "residual_p": health.residual_final,
          "force_osc": health.force_oscillation, "force_drift": getattr(health, "force_drift", None),
-         "run_dir": str(getattr(health, "run_dir", "") or "")}
+         "run_dir": str(getattr(health, "run_dir", "") or ""),
+         "force_mean_stderr": getattr(health, "force_mean_stderr", None)}
     d.update(more)
     return d
 
@@ -98,11 +99,15 @@ def cmd_remesh(target_m=1.0e-3):
     import trimesh
     import cadio as CI
     m = trimesh.load(ORIG0 / "car_half.stl")
-    ms = ml.MeshSet(); ms.add_mesh(ml.Mesh(m.vertices, m.faces))
-    ms.meshing_isotropic_explicit_remeshing(iterations=6, targetlen=ml.PureValue(target_m), featuredeg=30.0,
-                                            checksurfdist=True, maxsurfdist=ml.PureValue(2e-5))
-    r = ms.current_mesh()
-    t = trimesh.Trimesh(r.vertex_matrix(), r.face_matrix())
+    if (ADJ / "adjoint_faces.npy").exists():
+        # the exact surface the adjoint was solved on (any machine): judge then needs no mapping
+        t = trimesh.Trimesh(np.load(ADJ / "adjoint_verts.npy"), np.load(ADJ / "adjoint_faces.npy"), process=False)
+    else:
+        ms = ml.MeshSet(); ms.add_mesh(ml.Mesh(m.vertices, m.faces))
+        ms.meshing_isotropic_explicit_remeshing(iterations=6, targetlen=ml.PureValue(target_m), featuredeg=30.0,
+                                                checksurfdist=True, maxsurfdist=ml.PureValue(2e-5))
+        r = ms.current_mesh()
+        t = trimesh.Trimesh(r.vertex_matrix(), r.face_matrix())
     if ORIG.exists():
         shutil.rmtree(ORIG)
     shutil.copytree(ORIG0, ORIG, ignore=shutil.ignore_patterns("_body_half.stl", "car_half.stl"))
@@ -160,6 +165,88 @@ def cmd_variant(name, centre_key, amp_mm):
     print(name, meta[name], flush=True)
 
 
+def region_mask(v_m):
+    """Car-frame points (m) inside the sidepod design region (geometry.Car's region: the box
+    minus the T7.9.2/T7.9.3 wheel clearances, the halo zone and the spine), 1.0/0.0."""
+    from geometry import CarSpec
+    s = CarSpec()
+    X = s.x_nose_mm - v_m[:, 0] * 1e3; AY = np.abs(v_m[:, 1]) * 1e3; Z = v_m[:, 2] * 1e3   # STEP frame
+    box = ((X >= s.region_x[0]) & (X <= s.region_x[1]) & (AY <= s.region_ymax)
+           & (Z >= s.region_z[0]) & (Z <= s.region_z[1]))
+    dy = np.clip(AY - s.front_inner_y, 0, None)
+    t792 = ((AY >= s.front_inner_y) & (X <= s.x_front_axle)
+            & (X >= s.x_front_axle - s.r_wheel - (15.0 + dy / np.tan(np.radians(60)))))
+    dy = np.clip(AY - s.rear_inner_y, 0, None)
+    t793 = (AY >= s.rear_inner_y) & (X >= s.x_rear_axle) & (X <= s.x_rear_axle + s.r_wheel + 5.0 + dy)
+    halo = (X >= s.halo_x0) & (Z > s.halo_zmin)
+    spine = (AY <= s.spine_y) & (Z >= s.spine_z)
+    return (box & ~(t792 | t793 | halo) & ~spine).astype(float)
+
+
+def smooth_on_surface(v, f, area, sigma):
+    """Area-weighted Gaussian average of a per-vertex field over vertices within 2.5 sigma."""
+    from scipy.spatial import cKDTree
+    T = cKDTree(v)
+    out = np.empty(len(v))
+    for k, i in enumerate(T.query_ball_point(v, 2.5 * sigma)):
+        i = np.asarray(i)
+        w = np.exp(-((v[i] - v[k]) ** 2).sum(1) / sigma ** 2) * area[i]
+        out[k] = (w * f[i]).sum() / w.sum()
+    return out
+
+
+GRAD_SIGMA_M, GRAD_CLIP_PCT = 0.010, 98.0
+
+
+def grad_field(base):
+    """The adjoint's own steepest-ascent direction, made morphable: g clipped at the 98th
+    percentile of |g| (the top values are edge/corner singularities: one vertical edge at
+    x = 87.5 mm and the centreline at x = 67 mm carry g ~ 5e4 against a 95th percentile of 2.3e3),
+    restricted to the sidepod region, smoothed over 10 mm, faded to zero at the region edge and
+    on the symmetry face. Unit max. A move a*d gives a predicted change a * rho * sum(g d A)."""
+    g, area = adjoint_on_base(base)
+    v = base.vertices
+    c = np.percentile(np.abs(g), GRAD_CLIP_PCT)
+    mask = region_mask(v)
+    d = smooth_on_surface(v, np.clip(g, -c, c) * mask, area, GRAD_SIGMA_M)
+    d *= smooth_on_surface(v, mask, area, 0.003) * np.clip(v[:, 1] / 0.002, 0.0, 1.0) ** 2
+    d /= np.abs(d).max()
+    spikes = np.abs(g) > np.percentile(np.abs(g), 99.0)
+    from scipy.spatial import cKDTree
+    near = cKDTree(v[spikes]).query(v)[0] < 0.003
+    contrib = g * d * area
+    info = {"pred_mN_per_mm": float(1.225 * contrib.sum()) * 1e3 * 1e-3,
+            "share_within_3mm_of_top1pct_g": float(contrib[near].sum() / contrib.sum()),
+            "moved_vertices_over_10pct": int((np.abs(d) > 0.1).sum()),
+            "clip": float(c), "sigma_mm": GRAD_SIGMA_M * 1e3}
+    return d, info
+
+
+def cmd_gradvariant(name, amp_mm):
+    """A move along the adjoint's own gradient direction (grad_field), amp_mm at its peak
+    (negative = against it). Run as a +/- pair: one directional check of size, not a
+    replacement for the scatter test."""
+    import trimesh
+    import cadio as CI
+    base = trimesh.load(ORIG / "car_half.stl")
+    d, info = grad_field(base)
+    w = d * float(amp_mm) * 1e-3
+    m = base.copy()
+    nv = base.vertices + base.vertex_normals * w[:, None]
+    nv[np.abs(base.vertices[:, 1]) < 1e-9, 1] = 0.0
+    m.vertices = nv
+    folder = G / f"bump_{name}"
+    if folder.exists():
+        shutil.rmtree(folder)
+    shutil.copytree(ORIG, folder, ignore=shutil.ignore_patterns("_body_half.stl"))
+    CI.write_ascii_named(m, folder / "car_half.stl", "car", m.volume, 0.01)
+    np.save(folder / "move_m.npy", w)
+    meta = json.loads((R / "bumps.json").read_text())
+    meta[name] = {"site": "adjoint_gradient", "amp_mm": float(amp_mm), "dV_mm3": (m.volume - base.volume) * 1e9, **info}
+    (R / "bumps.json").write_text(json.dumps(meta, indent=1))
+    print(name, meta[name], flush=True)
+
+
 def cmd_bump(k, n_sub):
     ref = ref_dir()
     folder = G / f"bump_{k}"
@@ -168,6 +255,7 @@ def cmd_bump(k, n_sub):
     fell_back = bool(run and (Path(run) / "MORPH_FALLBACK").exists())
     d = rec(half, health, secs, bump=k, morph_fallback=fell_back, run_dir_kept=run)
     (R / f"bump_{k}.json").write_text(json.dumps(d, indent=1, default=float))
+    save_forces(run, f"bump_{k}")
     if run and not fell_back:
         shutil.rmtree(run, ignore_errors=True)             # keep the disk; the numbers are saved
     print(json.dumps(d, default=float), flush=True)
@@ -180,6 +268,7 @@ def cmd_reference_repeat(n_sub):
     run = latest_run_of(os.getpid())
     d = rec(half, health, secs, morph_fallback=bool(run and (Path(run) / "MORPH_FALLBACK").exists()), run_dir_kept=run)
     (R / "zero.json").write_text(json.dumps(d, indent=1, default=float))
+    save_forces(run, "zero")
     if run:
         shutil.rmtree(run, ignore_errors=True)
     print(json.dumps(d, default=float), flush=True)
@@ -199,6 +288,19 @@ def cmd_adjoint(n_sub):
     (R / "adjoint.json").write_text(json.dumps({"wall_s": round(time.time() - t, 1), "n": int(len(s)),
                                                 "rho": 1.225}, indent=1))
     print("adjoint done", len(s), round(time.time() - t), "s", flush=True)
+
+
+def save_forces(run, name):
+    """The force histories of a run (D20 is the mean of the last 20 % of forces/0/force.dat),
+    kept so each number's own error bar can be recomputed after the run folder is deleted."""
+    if not run:
+        return
+    o = R / "forces" / name
+    o.mkdir(parents=True, exist_ok=True)
+    for f in ("forces", "forces_car"):
+        src = Path(run) / "postProcessing" / f / "0" / "force.dat"
+        if src.exists():
+            shutil.copy(src, o / f"{f}.dat")
 
 
 def latest_run_of(pid):
@@ -229,29 +331,79 @@ def adjoint_on_base(base):
     return np.load(ADJ / "adjoint_g.npy")[i], area
 
 
+def run_stderr_mN(name, rec_):
+    """Standard error of a run's D20 (mean of the last 20 %, autocorrelation-corrected, Part 2's
+    force_mean_convergence) in mN: from the json if recorded, else from its saved force history."""
+    if rec_.get("force_mean_stderr") is not None:
+        return float(rec_["force_mean_stderr"]) * rec_["D20_half_N"] * 1e3
+    from openfoam_case import force_mean_convergence
+    f = R / "forces" / name / "forces.dat"
+    if not f.exists():
+        for jt in (R / "forces").glob("run_*/job.txt"):        # saved live by gate_forcesaver.sh
+            if jt.read_text().split()[-1:] == [name[5:]] and (jt.parent / "forces.dat").exists():
+                f = jt.parent / "forces.dat"
+    if not f.exists():
+        return None
+    return float(force_mean_convergence(f.read_text())[0]) * rec_["D20_half_N"] * 1e3
+
+
 def cmd_judge():
-    """Measured dD (bump - zero, morph path) vs adjoint prediction rho * sum(s dn)."""
+    """Measured dD (bump - zero, morph path) vs adjoint prediction rho * sum(g dn A).
+    Three readings, because one zero run shifts every row by the same unknown amount:
+      rows      each bump minus the zero run (r is immune to the shared offset; signs, slope are not)
+      pairs     (D+ - D-)/2 for +/- pairs at one site: no zero needed
+      noise     null - zero (a second zero sample) and each run's own standard error"""
     import trimesh
-    zero = json.loads((R / "zero.json").read_text())["D20_half_N"]
+    zrec = json.loads((R / "zero.json").read_text())
+    zero = zrec["D20_half_N"]
     base_run = json.loads((R / "base.json").read_text())["D20_half_N"]
+    meta = json.loads((R / "bumps.json").read_text())
     base = trimesh.load(ORIG / "car_half.stl")
     g, area = adjoint_on_base(base)
-    rows = []
+    rows, by = [], {}
     for p in sorted(R.glob("bump_*.json")):
         k = p.stem[5:]
         b = json.loads(p.read_text())
         dn = ((trimesh.load(G / f"bump_{k}" / "car_half.stl").vertices - base.vertices) * base.vertex_normals).sum(1)
-        rows.append({"bump": k, "measured_mN": (b["D20_half_N"] - zero) * 1e3,
-                     "predicted_mN": float(1.225 * (g * dn * area).sum()) * 1e3,
-                     "dV_mm3": float((dn * area).sum() * 1e9),
-                     "usable": bool(not b["morph_fallback"] and b["converged"])})
-    use = [r for r in rows if r["usable"]]
-    out = {"zero_minus_base_mN (one noise sample)": (zero - base_run) * 1e3, "rows": rows}
+        site = meta.get(k, {}).get("site", k); amp = meta.get(k, {}).get("amp_mm", 1.0)
+        r = {"bump": k, "site": site, "amp_mm": amp, "measured_mN": (b["D20_half_N"] - zero) * 1e3,
+             "predicted_mN": float(1.225 * (g * dn * area).sum()) * 1e3,
+             "stderr_mN": run_stderr_mN(f"bump_{k}", b), "dV_mm3": float((dn * area).sum() * 1e9),
+             "usable": bool(not b["morph_fallback"] and b["converged"]),
+             "_D": b["D20_half_N"] * 1e3}
+        rows.append(r)
+        by[k] = r
+    out = {"zero_minus_base_mN (fresh mesh vs morph path)": (zero - base_run) * 1e3,
+           "zero_stderr_mN": run_stderr_mN("zero", zrec)}
+    nulls = [r for r in rows if r["usable"] and abs(r["predicted_mN"]) < 0.01 and abs(r["amp_mm"]) < 0.1]
+    if nulls:
+        out["null_minus_zero_mN (second zero sample)"] = {r["bump"]: r["measured_mN"] for r in nulls}
+    pairs = []
+    sites = {}
+    for r in rows:
+        if r["usable"] and r not in nulls:
+            sites.setdefault(r["site"], []).append(r)
+    for site, rs in sites.items():
+        for rp in [x for x in rs if x["amp_mm"] > 0]:
+            for rm in [x for x in rs if x["amp_mm"] < 0 and abs(abs(x["amp_mm"]) - rp["amp_mm"]) < 1e-9]:
+                se = [x["stderr_mN"] for x in (rp, rm)]
+                pairs.append({"site": site, "amp_mm": rp["amp_mm"], "plus": rp["bump"], "minus": rm["bump"],
+                              "half_diff_measured_mN": (rp["_D"] - rm["_D"]) / 2,
+                              "half_diff_predicted_mN": (rp["predicted_mN"] - rm["predicted_mN"]) / 2,
+                              "half_diff_stderr_mN": (0.5 * np.hypot(*se)) if None not in se else None,
+                              "sum_minus_2zero_mN (curvature + zero offset)": rp["measured_mN"] + rm["measured_mN"]})
+    out["pairs"] = pairs
+    for r in rows:
+        r.pop("_D")
+    out["rows"] = rows
+    use = [r for r in rows if r["usable"] and r not in nulls]
     if len(use) >= 3:
         m = np.array([r["measured_mN"] for r in use]); pr = np.array([r["predicted_mN"] for r in use])
         rr = float(np.corrcoef(m, pr)[0, 1]); sg = (np.sign(m) == np.sign(pr))
-        out.update(pearson_r=rr, signs=f"{int(sg.sum())}/{len(use)}", slope_measured_per_predicted=float((m @ pr) / (pr @ pr)),
-                   passed=bool(rr >= 0.9 and sg.mean() >= 0.9))
+        out.update(pearson_r=rr, signs=f"{int(sg.sum())}/{len(use)}",
+                   slope_measured_per_predicted=float((m @ pr) / (pr @ pr)),
+                   passed_part3_marks=bool(rr >= 0.9 and sg.mean() >= 0.9),
+                   note="signs and slope depend on the single zero run; the pairs do not")
     (R / "judge.json").write_text(json.dumps(out, indent=1))
     print(json.dumps(out, indent=1))
 
@@ -271,6 +423,8 @@ if __name__ == "__main__":
         cmd_reference_repeat(npar(2))
     elif c == "adjoint":
         cmd_adjoint(npar(2))
+    elif c == "gradvariant":
+        cmd_gradvariant(sys.argv[2], sys.argv[3])
     elif c == "variant":
         cmd_variant(sys.argv[2], sys.argv[3], sys.argv[4])
     elif c == "judge":

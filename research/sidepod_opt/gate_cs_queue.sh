@@ -3,8 +3,9 @@
 # (bump differences are only meaningful on one machine's mesh), then the bumps in $GATE_JOBS on
 # $LANES lanes of 2 cores. Results: $GATE_RESULTS (default gate_results_cs/), committed and pushed
 # after every job. The adjoint is NOT re-run: judge maps the one in gate_results/ onto this mesh.
-#   GATE_JOBS="pod_front_m:pod_front:-1 nose_side_h:nose_side:0.5 pod_front:" ./gate_cs_queue.sh
-#   (name:site:mm makes a variant first; "name:" is a standard bump)
+#   GATE_JOBS="pod_front_m:pod_front:-1 grad_p15:grad:1.5 grad_m15:grad:-1.5 pod_front:" ./gate_cs_queue.sh
+#   (name:site:mm makes a variant first, name:grad:mm a move along the adjoint's own gradient
+#   direction; "name:" is a standard bump). Run +/- pairs on ONE machine: pairs need no zero run.
 cd "$(dirname "$0")"
 export GATE_RESULTS=${GATE_RESULTS:-$PWD/gate_results_cs}
 LANES=${LANES:-3}; NP_BASE=${NP_BASE:-4}
@@ -23,7 +24,8 @@ python -W ignore gate.py bumps
 names=()
 for j in $GATE_JOBS; do
   n=${j%%:*}; rest=${j#*:}
-  if [ -n "$rest" ]; then python -W ignore gate.py variant "$n" "${rest%%:*}" "${rest#*:}"; fi
+  if [ "${rest%%:*}" = grad ]; then python -W ignore gate.py gradvariant "$n" "${rest#*:}"
+  elif [ -n "$rest" ]; then python -W ignore gate.py variant "$n" "${rest%%:*}" "${rest#*:}"; fi
   names+=("$n")
 done
 [ -f "$GATE_RESULTS/base.json" ] || { ./gate_run.sh base base $NP_BASE; commit "base solve (state A)"; }

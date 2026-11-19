@@ -1,4 +1,27 @@
 {
- "zero_minus_base_mN (one noise sample)": 0.3694160865474194,
- "rows": []
+ "zero_minus_base_mN (fresh mesh vs morph path)": 0.3694160865474194,
+ "zero_stderr_mN": null,
+ "pairs": [],
+ "rows": [
+  {
+   "bump": "pod_front_low",
+   "site": "pod_front_low",
+   "amp_mm": 1.0,
+   "measured_mN": -0.583314893773057,
+   "predicted_mN": 0.09315102976551254,
+   "stderr_mN": null,
+   "dV_mm3": 396.3068074105207,
+   "usable": true
+  },
+  {
+   "bump": "pod_rear",
+   "site": "pod_rear",
+   "amp_mm": 1.0,
+   "measured_mN": -1.6021666975024051,
+   "predicted_mN": 0.0034984149204179945,
+   "stderr_mN": null,
+   "dV_mm3": 378.9506425587469,
+   "usable": true
+  }
+ ]
 }

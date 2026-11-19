@@ -22,7 +22,9 @@ start)
   CS=$(gh codespace create -R "$REPO" -b "$BRANCH" -m standardLinux32gb --idle-timeout 240m \
          --retention-period 24h -d "sidepod adjoint gate")
   echo "$CS" > "$STATE"; echo "codespace: $CS"
-  JOBS=${GATE_JOBS:-"pod_front_m:pod_front:-1 pod_front_low_m:pod_front_low:-1 nose_side_h:nose_side:0.5 nose_top_m:nose_top:-1 pod_front_2:pod_front:2 pod_rear_top_m:pod_rear_top:-1"}
+  # default: the decisive set, all on the codespace's own mesh (pairs need both halves on one machine):
+  # the gradient pair at two sizes, the pod_rear and pod_front_low pairs, and a noise null
+  JOBS=${GATE_JOBS:-"grad_p15:grad:1.5 grad_m15:grad:-1.5 null_pod_front:pod_front:0.02 pod_rear: pod_rear_m:pod_rear:-1 grad_p3:grad:3 pod_front_low: pod_front_low_m:pod_front_low:-1 grad_m3:grad:-3"}
   gh codespace ssh -c "$CS" -- "echo 'GATE_JOBS=\"$JOBS\"' > /tmp/jobs.env"
   gh codespace ssh -c "$CS" -- 'cat > /tmp/run.sh <<"EOF"
 #!/bin/bash

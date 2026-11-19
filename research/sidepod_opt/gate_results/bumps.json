@@ -106,5 +106,50 @@
   "site": "pod_front_low",
   "amp_mm": -1.0,
   "dV_mm3": -378.63514332259524
+ },
+ "grad_p15": {
+  "site": "adjoint_gradient",
+  "amp_mm": 1.5,
+  "dV_mm3": -648.7055777272647,
+  "pred_mN_per_mm": 1.1170189094167062,
+  "share_within_3mm_of_top1pct_g": 0.2917450966656791,
+  "moved_vertices_over_10pct": 5388,
+  "clip": 11216.956,
+  "sigma_mm": 10.0
+ },
+ "grad_m15": {
+  "site": "adjoint_gradient",
+  "amp_mm": -1.5,
+  "dV_mm3": 788.3410351950721,
+  "pred_mN_per_mm": 1.1170189094167062,
+  "share_within_3mm_of_top1pct_g": 0.2917450966656791,
+  "moved_vertices_over_10pct": 5388,
+  "clip": 11216.956,
+  "sigma_mm": 10.0
+ },
+ "grad_p075": {
+  "site": "adjoint_gradient",
+  "amp_mm": 0.75,
+  "dV_mm3": -342.35644470597686,
+  "pred_mN_per_mm": 1.1170189094167062,
+  "share_within_3mm_of_top1pct_g": 0.2917450966656791,
+  "moved_vertices_over_10pct": 5388,
+  "clip": 11216.956,
+  "sigma_mm": 10.0
+ },
+ "grad_m075": {
+  "site": "adjoint_gradient",
+  "amp_mm": -0.75,
+  "dV_mm3": 377.2653518618213,
+  "pred_mN_per_mm": 1.1170189094167062,
+  "share_within_3mm_of_top1pct_g": 0.2917450966656791,
+  "moved_vertices_over_10pct": 5388,
+  "clip": 11216.956,
+  "sigma_mm": 10.0
+ },
+ "pod_rear_m": {
+  "site": "pod_rear",
+  "amp_mm": -1.0,
+  "dV_mm3": -370.34101414044017
  }
 }

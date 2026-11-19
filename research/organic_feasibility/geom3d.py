@@ -29,6 +29,8 @@ import unified_phi as up  # noqa: E402
 from scipy import ndimage  # noqa: E402
 
 OUT = HERE / "results3d"
+import os
+SMOOTH = os.environ.get("SMOOTH", "0") == "1"
 LAYOUT = (120.3, 46.0, 43.72)
 ACT = {
     "sigmoid": lambda z: 1 / (1 + np.exp(-np.clip(5 * z, -60, 60))),
@@ -83,7 +85,9 @@ def base():
             (X - L["front_axle_m"] * 1e3) / 60.0,
             (X - L["rear_axle_m"] * 1e3) / 60.0,
         ], -1)
-        _BASE.update(g=g, X=X, Y=Y, Z=Z, inputs=inputs, hs=hs, ha=ha)
+        from scipy.ndimage import gaussian_filter
+        sk = gaussian_filter(np.where(hs, -d_a.clip(max=0) - 1.0, d_s) - 2.5, 1.5)
+        _BASE.update(g=g, X=X, Y=Y, Z=Z, inputs=inputs, hs=hs, ha=ha, sk=sk)
     return _BASE
 
 
@@ -100,7 +104,14 @@ def cppn_field(genome, cfg):
             s = s + w * vals[i]
         vals[node] = ACT[genome.nodes[node].activation](resp * s)
     out = vals[cfg.genome_config.output_keys[0]]
-    return -8.0 * out            # positive CPPN output = solid; ~mm scale before reinitialisation
+    f = -8.0 * out               # positive CPPN output = solid; ~mm scale before reinitialisation
+    if SMOOTH:
+        # wrap the rule skeleton in a smooth 2.5 mm skin and blend the network's shape into it
+        sk = base()["sk"]
+        k = 6.0
+        h = np.clip(0.5 + 0.5 * (f - sk) / k, 0.0, 1.0)
+        f = f * (1 - h) + sk * h - k * h * (1 - h)
+    return f
 
 
 def body(field_mm, machinable):
@@ -170,7 +181,7 @@ def sample(n, machinable):
             if sb is not None:
                 rep["iou_raw_vs_finished"] = iou(raw_solid | base()["hs"], sb)
                 bodies.append((level, i, sb))
-                render(sb, OUT / f"body_L{level}_{i}_m{int(machinable)}.png",
+                render(sb, OUT / f"body_L{level}_{i}_m{int(machinable)}_s{int(SMOOTH)}.png",
                        f"level {level} #{i}: nodes {len(g.nodes)}, {rep['body_g']} g, pieces {rep['pieces']}")
             rows.append(rep)
             print(json.dumps(rep), flush=True)
@@ -179,7 +190,7 @@ def sample(n, machinable):
                "median_pairwise_iou": float(np.median(div)) if div else None,
                "median_iou_raw_vs_finished": float(np.median([r["iou_raw_vs_finished"] for r in rows
                                                               if "iou_raw_vs_finished" in r]))}
-    (OUT / f"sample_m{int(machinable)}.json").write_text(json.dumps({"summary": summary, "rows": rows}, indent=1))
+    (OUT / f"sample_m{int(machinable)}_s{int(SMOOTH)}.json").write_text(json.dumps({"summary": summary, "rows": rows}, indent=1))
     print("SUMMARY", summary)
 
 

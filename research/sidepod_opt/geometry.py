@@ -148,6 +148,15 @@ class Car:
         self.other_g = s.other_parts_g if s.other_parts_g is not None else s.floor_g - self.foam0_g
         self.other_xz = s.other_parts_xz or (0.5 * (s.x_front_axle + s.x_rear_axle), 16.0)
 
+    @property
+    def wheels(self) -> np.ndarray:
+        """The four wheels on the design grid (for pictures only)."""
+        if not hasattr(self, "_wheels"):
+            self._wheels = np.zeros(self.body0.shape, bool)
+            for m in self.wheel_meshes.values():
+                self._wheels |= CI.voxelize(m, self.xs, self.ys, self.zs)
+        return self._wheels
+
     # ------------------------------------------------------------------ exact region solid
     def _region_manifold(self, eps=0.0):
         """Box minus the T7.9.2 / T7.9.3 wedges, the halo cap and the spine zone, both sides,

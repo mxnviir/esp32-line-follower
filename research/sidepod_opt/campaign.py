@@ -344,9 +344,10 @@ class Campaign:
 
 
 def _descriptor(car, f):
-    """Cheap SAIL descriptors straight from the field: foam volume in the region (cm3) and the pod's
-    mean height (mm)."""
-    pod = (f > 0) & car.region
+    """Cheap SAIL descriptors of the FINISHED design (symmetric, cargo in, forced air out; not
+    milled, which is too slow for MAP-Elites' thousands of calls): foam volume in the region (cm3)
+    and the pod's mean height (mm)."""
+    pod = car.finish(f) & car.region
     if not pod.any():
         return (0.0, 0.0)
     return (pod.sum() * car.h ** 3 / 1e3, float(car.Z[pod].mean()))

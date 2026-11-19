@@ -31,3 +31,15 @@ def surf(ax, mask, origin, h, color, alpha=1.0, smooth=0.8):
 def setup(ax, elev, azim):
     ax.set_xlim(-30, 230); ax.set_ylim(-45, 45); ax.set_zlim(0, 45)
     ax.set_box_aspect((260, 90, 45), zoom=1.25); ax.view_init(elev, azim); ax.set_axis_off()
+
+
+def mesh(ax, m, color, alpha=1.0, max_faces=60000):
+    """An exact triangle mesh (mm), shaded like surf()."""
+    if len(m.faces) > max_faces:
+        m = m.simplify_quadric_decimation(face_count=max_faces) if hasattr(m, "simplify_quadric_decimation") else m
+    tri = m.vertices[m.faces]
+    nrm = np.cross(tri[:, 1] - tri[:, 0], tri[:, 2] - tri[:, 0])
+    nrm /= np.linalg.norm(nrm, axis=1, keepdims=True) + 1e-12
+    shade = 0.35 + 0.65 * np.clip(np.abs(nrm @ LIGHT), 0, 1)
+    col = np.array(matplotlib.colors.to_rgb(color))[None] * shade[:, None]
+    ax.add_collection3d(Poly3DCollection(tri, facecolors=np.c_[col, np.full(len(col), alpha)], linewidths=0))

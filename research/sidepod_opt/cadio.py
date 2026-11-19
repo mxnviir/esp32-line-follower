@@ -120,11 +120,29 @@ def to_manifold(m):
 def from_manifold(M):
     import trimesh
     g = M.to_mesh()
-    return trimesh.Trimesh(np.asarray(g.vert_properties)[:, :3], np.asarray(g.tri_verts), process=True)
+    # process=False: manifold3d's output is already exact and watertight; trimesh's vertex
+    # welding merges distinct close vertices at Boolean seams and breaks it
+    return trimesh.Trimesh(np.asarray(g.vert_properties)[:, :3].astype(np.float64), np.asarray(g.tri_verts), process=False)
+
+
+def clean(m):
+    """A mesh as an STL reader will see it: corners welded, then zero-area slivers (left by
+    Booleans and tessellation at degenerate edges) removed and re-welded."""
+    import trimesh
+    w = trimesh.Trimesh(np.asarray(m.vertices, float), np.asarray(m.faces), process=True)
+    w.update_faces(w.nondegenerate_faces())
+    w.remove_unreferenced_vertices()
+    w.merge_vertices()
+    w = repair(w)                       # always: merges vertices < 1 um (mm units), so nothing that
+    if w.volume < 0:                    # close survives into a file read back in metres
+        w.invert()
+    return w
 
 
 def accept(m, ref_volume=None, tol=VOL_TOL, name="mesh"):
-    """Every exported mesh passes this or nothing is written."""
+    """Every exported mesh passes this or nothing is written. Tested WELDED, as a reader sees it."""
+    import trimesh
+    m = trimesh.Trimesh(np.asarray(m.vertices, float), np.asarray(m.faces), process=True)
     problems = []
     if not m.is_watertight:
         problems.append("not watertight")
@@ -153,8 +171,11 @@ def voxelize(mesh, xs, ys, zs) -> np.ndarray:
     return (gx.astype(np.int8) + gy + gz) >= 2
 
 
-def write_ascii_named(mesh, path: Path, name: str):
+def write_ascii_named(mesh, path: Path, name: str, ref_volume=None, tol=VOL_TOL):
+    """Write, then read the FILE back and accept it (the check is on what OpenFOAM will read)."""
     import trimesh
     lines = trimesh.exchange.stl.export_stl_ascii(mesh).splitlines()
     lines[0], lines[-1] = f"solid {name}", f"endsolid {name}"
     Path(path).write_text("\n".join(lines) + "\n")
+    back = trimesh.load(path)
+    accept(back, ref_volume, tol, name=f"{Path(path).name} (read back)")

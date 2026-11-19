@@ -294,19 +294,19 @@ class Car:
         import manifold3d as mf
         out = Path(out); out.mkdir(parents=True, exist_ok=True)
         s = self.s
-        full = self.to_car_frame(body_mesh)
+        full = self.to_car_frame(CI.clean(body_mesh))           # clean in mm, then scale and mirror
         CI.accept(full, body_mesh.volume * 1e-9, name="body (car frame)")
-        half = CI.from_manifold(CI.to_manifold(full) ^ mf.Manifold.cube([1.0, 1.0, 1.0]).translate([-0.5, 0.0, -0.5]))
-        CI.accept(half, full.volume / 2, tol=0.002, name="half body")
-        CI.write_ascii_named(half, out / "car_half.stl", "car")
-        CI.write_ascii_named(full, out / "body_full.stl", "car")
+        # cut at the symmetry plane in mm (float32 inside manifold3d), then to the car frame
+        half_mm = CI.from_manifold(CI.to_manifold(body_mesh) ^ mf.Manifold.cube([1000., 500., 500.]).translate([-500., 0., -100.]))
+        half = self.to_car_frame(CI.clean(half_mm))
+        CI.write_ascii_named(half, out / "car_half.stl", "car", full.volume / 2, 0.002)
+        CI.write_ascii_named(full, out / "body_full.stl", "car", body_mesh.volume * 1e-9)
         omega = -s.speed_mps / (s.r_wheel / 1e3)
         surfaces = []
         for name, solid in (("wheelF", "wheel_fl"), ("wheelR", "wheel_rl")):      # the +y wheels
             w = self.to_car_frame(self.wheel_meshes[solid])
             w.apply_translation([0, 0, -WHEEL_SINK_MM / 1e3])
-            CI.accept(w, name=name)
-            CI.write_ascii_named(w, out / f"{name}.stl", name)
+            CI.write_ascii_named(w, out / f"{name}.stl", name, self.wheel_meshes[solid].volume * 1e-9)
             c = w.bounds.mean(0)
             surfaces.append({"name": name, "stl": f"{name}.stl", "rotating": {
                 "origin": [float(c[0]), float(c[1]), float(s.r_wheel - WHEEL_SINK_MM) / 1e3], "axis": [0, 1, 0], "omega": omega}})

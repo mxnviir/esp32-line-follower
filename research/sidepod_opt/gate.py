@@ -4,6 +4,7 @@
     python gate.py bumps                  write the bump STLs (exact mesh, Gaussian normal moves)
     python gate.py bump <k> [np]          time bump k on the state-A mesh reshaped onto it (morph path)
     python gate.py adjoint [np]           ESI adjoint on the original: per-vertex dD/dn
+    python gate.py variant <name> <site> <mm>  extra bump folder at another height (null, pairs)
     python gate.py judge                  measured vs predicted drag change per bump
 
 Drag only (half car, N): race time and mass are left out on purpose. Every result goes to
@@ -134,6 +135,29 @@ def cmd_bumps():
     (R / "bumps.json").write_text(json.dumps(out, indent=1))
 
 
+def cmd_variant(name, centre_key, amp_mm):
+    """An extra bump folder: a CENTRES site at another height (negative = dent). For the noise
+    floor (tiny height), linearity and +/- pairs."""
+    import trimesh
+    import cadio as CI
+    base = trimesh.load(ORIG / "car_half.stl")
+    w, c = bump_field(base, CENTRES[centre_key], a=float(amp_mm) * 1e-3)
+    m = base.copy()
+    nv = base.vertices + base.vertex_normals * w[:, None]
+    nv[np.abs(base.vertices[:, 1]) < 1e-9, 1] = 0.0
+    m.vertices = nv
+    folder = G / f"bump_{name}"
+    if folder.exists():
+        shutil.rmtree(folder)
+    shutil.copytree(ORIG, folder, ignore=shutil.ignore_patterns("_body_half.stl"))
+    CI.write_ascii_named(m, folder / "car_half.stl", "car", m.volume, 0.01)
+    np.save(folder / "move_m.npy", w)
+    meta = json.loads((R / "bumps.json").read_text())
+    meta[name] = {"site": centre_key, "amp_mm": float(amp_mm), "dV_mm3": (m.volume - base.volume) * 1e9}
+    (R / "bumps.json").write_text(json.dumps(meta, indent=1))
+    print(name, meta[name], flush=True)
+
+
 def cmd_bump(k, n_sub):
     ref = ref_dir()
     folder = G / f"bump_{k}"
@@ -214,10 +238,8 @@ def cmd_judge():
         raise SystemExit("adjoint corners differ from the bump base mesh")
     u, near, g, area = adjoint_on_base(base)
     rows = []
-    for k in CENTRES:
-        p = R / f"bump_{k}.json"
-        if not p.exists():
-            continue
+    for p in sorted(R.glob("bump_*.json")):
+        k = p.stem[5:]
         b = json.loads(p.read_text())
         dn = ((trimesh.load(G / f"bump_{k}" / "car_half.stl").vertices - base.vertices) * base.vertex_normals).sum(1)
         rows.append({"bump": k, "measured_mN": (b["D20_half_N"] - zero) * 1e3,
@@ -254,5 +276,7 @@ if __name__ == "__main__":
         cmd_reference_repeat(npar(2))
     elif c == "adjoint":
         cmd_adjoint(npar(2))
+    elif c == "variant":
+        cmd_variant(sys.argv[2], sys.argv[3], sys.argv[4])
     elif c == "judge":
         cmd_judge()

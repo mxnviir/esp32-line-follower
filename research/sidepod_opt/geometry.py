@@ -42,6 +42,9 @@ WHEEL_SINK_MM = 0.3                  # Part 4 assembly.SINK_MM
 MIN_FOAM_WALL_MM = 3.0               # Part 5 rules_constants.MACHINED_MIN_WALL_MM (team)
 
 
+SEAM_EPS_MM = 0.05                 # pod/kept-CAD overlap at the region boundary (below any CFD cell)
+
+
 @dataclass
 class CarSpec:
     """Everything about the car that is not the sidepod. Defaults: the trial car STEP."""
@@ -137,6 +140,7 @@ class Car:
         self.rlo, self.rhi = w.min(0), w.max(0) + 1
         # ---- exact solids for the Booleans
         self.region_M = self._region_manifold()
+        self.region_Me = self._region_manifold(SEAM_EPS_MM)      # grown: the pod overlaps the kept CAD
         self.body_M = CI.to_manifold(self.body_mesh)
         self.kept_M = self.body_M - self.region_M
         # ---- mass bookkeeping (body foam from the exact mesh)
@@ -145,9 +149,11 @@ class Car:
         self.other_xz = s.other_parts_xz or (0.5 * (s.x_front_axle + s.x_rear_axle), 16.0)
 
     # ------------------------------------------------------------------ exact region solid
-    def _region_manifold(self):
+    def _region_manifold(self, eps=0.0):
         """Box minus the T7.9.2 / T7.9.3 wedges, the halo cap and the spine zone, both sides,
-        built from exact prisms (STEP frame, mm). Same rules as the voxel masks above."""
+        built from exact prisms (STEP frame, mm). Same rules as the voxel masks above.
+        eps > 0 grows it by eps on every face (box out, cuts in): the pod is cut with that, so it
+        overlaps the kept CAD instead of sharing faces with it (shared faces leave seam slivers)."""
         import manifold3d as mf
         s = self.s
         big = 200.0
@@ -156,8 +162,17 @@ class Car:
             return mf.Manifold.cube([x1 - x0, y1 - y0, z1 - z0]).translate([x0, y0, z0])
 
         def prism_xy(poly, z0, z1):                                 # polygon in (x, y), extruded in z
-            return mf.Manifold.extrude(mf.CrossSection([poly]), z1 - z0).translate([0, 0, z0])
-        R = box(s.region_x[0], s.region_x[1], -s.region_ymax, s.region_ymax, s.region_z[0], s.region_z[1])
+            P = np.asarray(poly, float)
+            if np.sum(P[:, 0] * np.roll(P[:, 1], -1) - np.roll(P[:, 0], -1) * P[:, 1]) < 0:
+                P = P[::-1]                 # manifold3d needs CCW: a CW polygon gives an invalid solid
+            cs = mf.CrossSection([P.tolist()])
+            if e:
+                cs = cs.offset(-e, mf.JoinType.Miter)
+            M = mf.Manifold.extrude(cs, z1 - z0).translate([0, 0, z0])
+            assert M.status() == mf.Error.NoError and M.volume() > 0, "wedge prism"
+            return M
+        e = eps
+        R = box(s.region_x[0] - e, s.region_x[1] + e, -s.region_ymax - e, s.region_ymax + e, s.region_z[0] - e, s.region_z[1] + e)
         cut = []
         t60 = 1.0 / np.tan(np.radians(60))
         xf = s.x_front_axle - s.r_wheel - 15.0
@@ -165,16 +180,17 @@ class Car:
             yi = sg * s.front_inner_y
             yo = sg * (s.front_inner_y + 60.0)
             poly = [[s.x_front_axle, yi], [xf, yi], [xf - 60.0 * t60, yo], [s.x_front_axle, yo]]
-            cut.append(prism_xy(poly if sg > 0 else poly[::-1], -1, 60))
+            cut.append(prism_xy(poly, -1, 60))
             yi = sg * s.rear_inner_y
             yo = sg * (s.rear_inner_y + 60.0)
             xr = s.x_rear_axle + s.r_wheel + 5.0
             poly = [[s.x_rear_axle, yi], [s.x_rear_axle, yo], [xr + 60.0, yo], [xr, yi]]
-            cut.append(prism_xy(poly if sg > 0 else poly[::-1], -1, 60))
-        cut.append(box(s.halo_x0, big, -big, big, s.halo_zmin, big))
-        cut.append(box(-big, big, -s.spine_y, s.spine_y, s.spine_z, big))
+            cut.append(prism_xy(poly, -1, 60))
+        cut.append(box(s.halo_x0 + e, big, -big, big, s.halo_zmin + e, big))
+        cut.append(box(-big, big, -s.spine_y + e, s.spine_y - e, s.spine_z + e, big))
         for c in cut:
             R = R - c
+        assert R.status() == mf.Error.NoError and R.volume() > 0, "region solid is empty"
         return R
 
     # ------------------------------------------------------------------ design -> body (voxels)
@@ -203,15 +219,21 @@ class Car:
         B = np.where(self.region | self.cargo, B, self.body0)
         return B, rep
 
-    def thin_foam_mm3(self, B):
-        """Foam in the region thinner than the team's 3 mm wall: what an opening by a 1.5 mm ball
-        removes, ignoring the outermost cell (corners of the voxel staircase)."""
+    def _thin(self, B):
+        """Region foam thinner than the team's 3 mm wall: what an opening by a 1.5 mm ball removes,
+        ignoring the outermost cell (corners of the voxel staircase)."""
         rr = MIN_FOAM_WALL_MM / 2 / self.h
         k = np.arange(-int(np.ceil(rr)), int(np.ceil(rr)) + 1)
         ball = (k[:, None, None] ** 2 + k[None, :, None] ** 2 + k[None, None, :] ** 2) <= rr * rr
         op = ndimage.binary_opening(B, ball)
-        thin = B & self.region & ~op & (ndimage.distance_transform_edt(~op) > 1.0)
-        return float(thin.sum() * self.h ** 3)
+        return B & self.region & ~op & (ndimage.distance_transform_edt(~op) > 1.0)
+
+    def thin_foam_mm3(self, B):
+        """Thin foam the DESIGN made: thin cells that are not already thin on the team's original
+        (its own CAD edges are thin at this test: 32 mm3 at 1 mm, 226 mm3 at 0.5 mm)."""
+        if not hasattr(self, "_thin0"):
+            self._thin0 = self._thin(self.body0)
+        return float((self._thin(B) & ~self._thin0).sum() * self.h ** 3)
 
     def check(self, B: np.ndarray) -> dict:
         lab, n = ndimage.label(B)
@@ -245,8 +267,8 @@ class Car:
             m.invert()
         if not m.is_watertight:
             m = CI.repair(m)
-        pod_M = CI.to_manifold(m) ^ self.region_M                  # ^ = intersection in manifold3d
-        out = CI.from_manifold(self.kept_M + pod_M)
+        pod_M = CI.to_manifold(m) ^ self.region_Me                  # ^ = intersection in manifold3d
+        out = CI.clean(CI.from_manifold(self.kept_M + pod_M))      # weld Boolean seams as a reader will
         CI.accept(out, name="designed body")
         return out
 

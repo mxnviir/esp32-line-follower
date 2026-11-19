@@ -98,7 +98,14 @@ def repair(m):
     ms.meshing_merge_close_vertices(threshold=ml.PureValue(1e-3))
     ms.meshing_remove_duplicate_faces()
     ms.meshing_remove_null_faces()
-    ms.meshing_repair_non_manifold_edges()
+    for _ in range(3):                  # Boolean seams can leave fans that need more than one pass
+        ms.meshing_repair_non_manifold_edges()
+        ms.meshing_repair_non_manifold_vertices()
+        ms.meshing_remove_null_faces()
+        ms.meshing_remove_unreferenced_vertices()
+        tm = ms.get_topological_measures()
+        if tm["non_two_manifold_edges"] == 0 and tm["non_two_manifold_vertices"] == 0:
+            break
     ms.meshing_close_holes(maxholesize=200)
     ms.meshing_re_orient_faces_coherently()
     r = ms.current_mesh()

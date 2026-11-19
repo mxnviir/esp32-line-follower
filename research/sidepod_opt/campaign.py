@@ -103,11 +103,12 @@ class Campaign:
 
     def build_and_export(self, rep, x, cid):
         b = self.car.build(self.field(rep, x))
-        legal = b["check"]["ok"] and b["mass"]["legal"]
+        legal = bool(b["check"]["ok"] and b["mass"] and b["mass"]["legal"])
         folder = self.root / "cars" / cid
         if legal:
-            self.car.export_car_folder(b["body"], folder, cid)
-            np.save(folder / "body.npy", np.packbits(b["body"]))
+            self.car.export_car_folder(b["mesh"], folder, cid)
+            np.save(folder / "body.npy", np.packbits(b["voxels"]))
+            (folder / "mass.json").write_text(json.dumps(b["mass"], default=float))
         return b, legal, folder
 
     # ------------------------------------------------------------------ stages
@@ -184,14 +185,15 @@ class Campaign:
         ref_key = f"ref:{s['name']}"
         if ref_key not in self.state:                     # the original car, timed the same way, once per stage
             cid = f"c{self.state['n']:05d}"; self.state["n"] += 1
-            b = self.car.build(self.car.sdf_original)
-            folder = self.car.export_car_folder(b["body"], self.root / "cars" / cid, cid)
-            np.save(folder / "body.npy", np.packbits(b["body"]))
+            b = self.car.build(self.car.sdf_original, original=True)       # the exact CAD
+            folder = self.car.export_car_folder(b["mesh"], self.root / "cars" / cid, cid)
+            np.save(folder / "body.npy", np.packbits(b["voxels"]))
+            (folder / "mass.json").write_text(json.dumps(b["mass"], default=float))
             self.log(dict(id=cid, stage=s["name"], run=None, method="reference", fidelity=s.get("fidelity"),
                           check=b["check"], mass={k: (float(v) if not isinstance(v, bool) else v) for k, v in b["mass"].items()}, legal=True))
             self.state["inflight"][cid] = {"run": None, "stage": s["name"]}
             self.state[ref_key] = cid
-            ev.submit([{"id": cid, "folder": str(folder), "body": b["body"], "fidelity": s.get("fidelity")}])
+            ev.submit([{"id": cid, "folder": str(folder), "body": b["voxels"], "fidelity": s.get("fidelity")}])
         self._collect(ev, s)
         all_done = True
         for run_id, mname, start, seed, o in self._runs(s):
@@ -217,12 +219,12 @@ class Campaign:
                     xfile = f"x/{cid}.npy"; (self.root / "x").mkdir(exist_ok=True); np.save(self.root / xfile, x)
                 row = dict(id=cid, stage=s["name"], run=run_id, method=mname, start=start, seed=seed, x_file=xfile,
                            fidelity=s.get("fidelity"), check=b["check"], mill=b["mill"],
-                           mass={k: (float(v) if not isinstance(v, bool) else v) for k, v in b["mass"].items()}, legal=legal)
+                           mass={k: (float(v) if not isinstance(v, bool) else v) for k, v in (b["mass"] or {}).items()}, legal=legal)
                 self.log(row)
                 if not legal:
                     rs["illegal"] += 1; illegal_xs.append(x)
                     continue
-                cases.append({"id": cid, "folder": str(folder), "body": b["body"], "fidelity": s.get("fidelity")})
+                cases.append({"id": cid, "folder": str(folder), "body": b["voxels"], "fidelity": s.get("fidelity")})
                 self.state["inflight"][cid] = {"run": run_id, "stage": s["name"]}
                 self._pending_x = getattr(self, "_pending_x", {}); self._pending_x[cid] = x
                 rs["used"] += 1
@@ -267,7 +269,8 @@ class Campaign:
                 info = {}
                 if "grad_vertices_m" in r and T is not None:
                     body = np.unpackbits(np.load(self.root / "cars" / cid / "body.npy"))[: self.car.body0.size].reshape(self.car.body0.shape).astype(bool)
-                    info["grad_field"] = EV.field_gradient(self.car, body, self.rm, r["D20_N"], r["L20_N"] or 0.0,
+                    mass = json.loads((self.root / "cars" / cid / "mass.json").read_text())
+                    info["grad_field"] = EV.field_gradient(self.car, body, mass, self.rm, r["D20_N"], r["L20_N"] or 0.0,
                                                            r["grad_vertices_m"], r["grad_dD20_half_dn"])
                 xs.append(x); ys.append(T); infos.append(info)
             if xs:
@@ -436,7 +439,7 @@ def make_refs(c: Campaign, res: str, iters=3000, extra=1000):
     sys.path.insert(0, str(EV.P2))
     from cfd_wrapper import run_half_car_cfd
     import stopwatch as SW
-    folder = c.car.export_car_folder(c.car.body0, c.root / "cars" / "original", "original")
+    folder = c.car.export_car_folder(c.car.body_mesh, c.root / "cars" / "original", "original")
     body = SW.body_stl(folder / "car_half.stl", folder / "_body_half.stl")
     out = {}
     prev = None
@@ -465,7 +468,7 @@ def gate_adjoint(c: Campaign, res="medium", k=10, eps_mm=1.0, min_r=0.9):
     ad = EV.AdjointEvaluator(c.car, c.rm, res=res)
     b0, _, f0 = c.build_and_export(rep, x0, "gate_0")
     ad.submit([{"id": "g0", "folder": str(f0)}]); r0 = ad.collect()["g0"]
-    g = EV.field_gradient(c.car, b0["body"], c.rm, r0["D20_N"], r0["L20_N"], r0["grad_vertices_m"], r0["grad_dD20_half_dn"])
+    g = EV.field_gradient(c.car, b0["voxels"], b0["mass"], c.rm, r0["D20_N"], r0["L20_N"], r0["grad_vertices_m"], r0["grad_dD20_half_dn"])
     gx = rep.field_grad_to_x(g)
     of = EV.OpenFOAMEvaluator(n_subdomains=2)
     rng = np.random.default_rng(0)
@@ -492,8 +495,8 @@ def main():
         root.mkdir(parents=True, exist_ok=True)
         (root / "config.json").write_text(Path(sys.argv[3]).read_text())
         c = Campaign(root); c.save()
-        b = c.car.build(c.car.sdf_original)
-        c.car.export_car_folder(b["body"], root / "cars" / "original", "original")
+        b = c.car.build(c.car.sdf_original, original=True)
+        c.car.export_car_folder(b["mesh"], root / "cars" / "original", "original")
         print("ready:", root, "| original milled foam", round(float(b["mass"]["foam_g"]), 2), "g, checks", b["check"])
         return
     c = Campaign(root)

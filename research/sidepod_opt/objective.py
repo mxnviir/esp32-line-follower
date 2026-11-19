@@ -51,9 +51,10 @@ class RaceModel:
         return float(T), {n: float(g[i]) for i, n in enumerate(R.PARAM_NAMES)}
 
 
-def mass_cell_gradient(car, B, slopes):
-    """dT (s) per mm^3 of foam added at each cell, through mass, lead swap and COM (exact)."""
-    s, m = car.s, car.mass(B)
+def mass_cell_gradient(car, m, slopes):
+    """dT (s) per mm^3 of foam added at each cell, through mass, lead swap and COM (exact).
+    m: car.mass(body mesh) of the car the gradient is taken at."""
+    s = car.s
     rho = 1e-3 * 0.163                                         # g per mm^3
     tot = m["race_mass_g"]
     lead_active = m["lead_g"] > 0

@@ -34,6 +34,7 @@ from pathlib import Path
 import numpy as np
 
 HERE = Path(__file__).resolve().parent
+RHO = 1.225                        # kg/m3, Part 2
 REPO = HERE.parents[1]
 P2 = REPO / "part2-simulation"
 
@@ -353,34 +354,45 @@ class AdjointEvaluator(Evaluator):
                 import stopwatch as SW
                 cfg = OA.AdjointRunConfig(resolution=self.res, n_subdomains=self.np)
                 body = SW.body_stl(folder / "car_half.stl", folder / "_body_half.stl")
-                sens = OA.invoke_adjoint(str(body), str(folder / "adjoint_case"), cfg)    # dD20_half/dn per STL vertex
+                # one value per STL triangle CORNER (the nearest CFD point's): kinematic dD20_half/dn
+                # per unit AREA (ESI's default, includeSurfaceArea false; gate.py and Part 3). Turned
+                # into N per m of outward move per corner: rho * value * (face area / 3).
+                s = np.asarray(OA.invoke_adjoint(str(body), str(folder / "adjoint_case"), cfg))
                 import trimesh
-                verts = trimesh.load(body).vertices
+                bm = trimesh.load(body)
+                verts = bm.vertices[bm.faces].reshape(-1, 3)
+                if len(verts) != len(s):
+                    raise RuntimeError(f"adjoint: {len(s)} values for {len(verts)} STL corners")
+                sens = RHO * s * np.repeat(bm.area_faces / 3.0, 3)
                 fwd = run_openfoam_case(folder, self.res, {}, self.np, 1000)
             else:
                 out = folder / "dafoam_out.json"
                 subprocess.run([sys.executable, str(HERE / "dafoam_run.py"), str(folder), self.res], check=True)
                 d = json.loads(out.read_text())
-                verts, sens, fwd = np.array(d["vertices_m"]), np.array(d["dD20_half_dn_N_per_m"]), d["forward"]
+                verts, sens, fwd = np.array(d["vertices_m"]), np.array(d["dD20_half_dn_N_per_m"]), d["forward"]   # per point, area-integrated
             self._done[c["id"]] = dict(fwd, grad_vertices_m=np.asarray(verts).tolist(), grad_dD20_half_dn=np.asarray(sens).tolist())
 
 
-def field_gradient(car, body, rm, D20, L20, verts_m, dD_half_dn):
-    """Race-time gradient on the 1 mm field (s per mm of field = per mm of outward surface move):
-    aero: dT/dD20 * 2 * dD_half/dn at the cell nearest each vertex (+ the mirrored cell);
-    mass and COM: exact per-cell slope times the area each vertex carries."""
+def field_gradient(car, body, mass, rm, D20, L20, pts_m, dD_half_N_per_m):
+    """Race-time gradient on the 1 mm field (s per mm of field = per mm of outward surface move).
+    pts_m: surface points (car frame, m); dD_half_N_per_m: half-car drag change per m of outward
+    move of the surface each point carries (area already in). Aero: dT/dD20 x the points' sum per
+    cell (N/mm), put on the cell and its mirror (finish() symmetrises the field: a field change at
+    one cell is half a change on each side of the whole car, 2 x 0.5 = 1). Mass and COM: exact
+    per-cell slope (objective.mass_cell_gradient) on the surface cells, x cell face area."""
     from objective import mass_cell_gradient
-    m = car.mass(body)
-    T, sl = rm(D20, L20, m)
+    from scipy import ndimage
+    T, sl = rm(D20, L20, mass)
     g = np.zeros(car.body0.shape)
-    x = car.s.x_nose_mm - np.asarray(verts_m)[:, 0] * 1e3
-    y = np.asarray(verts_m)[:, 1] * 1e3
-    z = np.asarray(verts_m)[:, 2] * 1e3
+    P = np.asarray(pts_m)
+    x = car.s.x_nose_mm - P[:, 0] * 1e3
+    y = P[:, 1] * 1e3
+    z = P[:, 2] * 1e3
     ix = np.clip(np.searchsorted(car.xs, x) - 1, 0, len(car.xs) - 1)
     iz = np.clip(np.searchsorted(car.zs, z) - 1, 0, len(car.zs) - 1)
     for yy in (y, -y):
         iy = np.clip(np.searchsorted(car.ys, yy) - 1, 0, len(car.ys) - 1)
-        np.add.at(g, (ix, iy, iz), sl["drag_20_n"] * 2.0 * np.asarray(dD_half_dn) * 1e-3 / 2.0)
-    surf = body & ~__import__("scipy").ndimage.binary_erosion(body)
-    g += np.where(surf, mass_cell_gradient(car, body, sl) * car.h ** 2, 0.0)
+        np.add.at(g, (ix, iy, iz), sl["drag_20_n"] * np.asarray(dD_half_N_per_m) * 1e-3)
+    surf = body & ~ndimage.binary_erosion(body)
+    g += np.where(surf, mass_cell_gradient(car, mass, sl) * car.h ** 2, 0.0)
     return g * car.region

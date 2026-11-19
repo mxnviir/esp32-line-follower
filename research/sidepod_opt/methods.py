@@ -36,26 +36,40 @@ class Method:
 
 
 class CMA(Method):
+    """CMA-ES, one generation at a time: ask() hands out the current generation's samples (an
+    empty list once all are out), and the ES is told only when every sample of THAT generation
+    has a result, in its own order. Illegal cars (None) get the generation's worst + 0.05 s."""
+
     def __init__(self, rep, start, rng, **o):
         super().__init__(rep, start, rng, **o)
         import cma
         self.es = cma.CMAEvolutionStrategy(self.x0, o.get("sigma", 1.0),
                                            {"seed": int(rng.integers(1, 1 << 30)), "verbose": -9,
                                             "popsize": o.get("popsize", 12)})
-        self._asked = []
+        self._new_generation()
+
+    def _new_generation(self):
+        self.gen = [np.asarray(x) for x in self.es.ask()]
+        self.gen_y = [False] * len(self.gen)                     # False = no result yet
+        self.handed = 0
 
     def ask(self, n):
-        xs = self.es.ask(n)
-        self._asked += xs
-        return xs
+        out = self.gen[self.handed: self.handed + n]
+        self.handed += len(out)
+        return [x.copy() for x in out]
 
     def tell(self, xs, ys, info=None):
         super().tell(xs, ys)
-        worst = max([y for y in ys if y is not None], default=1.0)
-        self._buf = getattr(self, "_buf", []) + [(x, (y if y is not None else worst + 0.05)) for x, y in zip(xs, ys)]
-        while len(self._buf) >= self.es.popsize:
-            chunk, self._buf = self._buf[: self.es.popsize], self._buf[self.es.popsize:]
-            self.es.tell([c[0] for c in chunk], [c[1] for c in chunk])
+        for x, y in zip(xs, ys):
+            x = np.asarray(x)
+            i = next((i for i, g in enumerate(self.gen) if self.gen_y[i] is False and np.allclose(g, x)), None)
+            if i is not None:
+                self.gen_y[i] = y                                # results from an older generation are ignored
+        if all(y is not False for y in self.gen_y):
+            good = [y for y in self.gen_y if y is not None]
+            worst = max(good, default=1.0)
+            self.es.tell(self.gen, [y if y is not None else worst + 0.05 for y in self.gen_y])
+            self._new_generation()
 
 
 def _gp_fit(X, y):
@@ -171,33 +185,43 @@ class SAIL(_Surrogate):
 
 
 class SPSA(Method):
-    """Gradient by simultaneous perturbation: 2 runs per step whatever the dimension."""
+    """Gradient by simultaneous perturbation: 2 runs per step whatever the dimension. Several pairs
+    per batch each keep their own perturbation; one step from the mean of the batch's estimates."""
 
     def __init__(self, rep, start, rng, **o):
         super().__init__(rep, start, rng, **o)
-        self.x = self.x0.copy(); self.k = 0; self.pending = None
+        self.x = self.x0.copy(); self.k = 0; self.pending = []
 
     def ask(self, n):
         out = []
+        self.k += 1
         for _ in range(max(1, n // 2)):
-            self.k += 1
             delta = self.rng.choice([-1.0, 1.0], self.x.size)
             if hasattr(self.rep, "cshape"):                     # level set: smooth sign patterns
                 from scipy import ndimage
                 delta = np.sign(ndimage.gaussian_filter(self.rng.normal(0, 1, self.rep.cshape), 2.0)).ravel()
             ck = self.o.get("c", 1.0) * (self.o.get("c_mm", 1.0) if hasattr(self.rep, "cshape") else 1.0) / self.k ** 0.101
-            self.pending = (delta, ck)
-            out += [self.x + ck * delta, self.x - ck * delta]
+            xp, xm = self.x + ck * delta, self.x - ck * delta
+            self.pending.append([xp, xm, delta, ck, "missing", "missing"])
+            out += [xp, xm]
         return out
 
     def tell(self, xs, ys, info=None):
         super().tell(xs, ys)
-        for i in range(0, len(xs) - 1, 2):
-            yp, ym = ys[i], ys[i + 1]
-            if yp is None or ym is None:
-                continue
-            delta, ck = self.pending
-            g = (yp - ym) / (2 * ck) * delta
+        gs, keep = [], []
+        for e in self.pending:                                   # e = [xp, xm, delta, ck, yp, ym]
+            for x, y in zip(xs, ys):
+                x = np.asarray(x)
+                for j in (0, 1):
+                    if e[4 + j] == "missing" and x.shape == e[j].shape and np.allclose(x, e[j]):
+                        e[4 + j] = y
+            if "missing" in (e[4], e[5]):
+                keep.append(e); continue                         # the other half is still being timed
+            if e[4] is not None and e[5] is not None:
+                gs.append((e[4] - e[5]) / (2 * e[3]) * e[2])
+        self.pending = keep
+        if gs:
+            g = np.mean(gs, axis=0)
             a = self.o.get("a", 1.5) / (self.k + 2) ** 0.602
             self.x = self.x - a * g / (np.abs(g).max() + 1e-12)
 
@@ -252,6 +276,9 @@ class NEAT(Method):
 
     def tell(self, xs, ys, info=None):
         for (gid, g), y in zip(xs, ys):
+            g = self.pop.population.get(gid, g)     # the population's own genome: after a pickle reload
+            if g is None:                            # the asked object is a stale copy
+                continue
             g.fitness = -10.0 if y is None else -float(y)
             self.scored[gid] = g
             if y is not None:

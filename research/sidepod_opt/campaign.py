@@ -218,6 +218,7 @@ class Campaign:
                 if not isinstance(x, tuple):
                     xfile = f"x/{cid}.npy"; (self.root / "x").mkdir(exist_ok=True); np.save(self.root / xfile, x)
                 row = dict(id=cid, stage=s["name"], run=run_id, method=mname, start=start, seed=seed, x_file=xfile,
+                           neat_gid=(int(x[0]) if isinstance(x, tuple) else None),
                            fidelity=s.get("fidelity"), check=b["check"], mill=b["mill"],
                            mass={k: (float(v) if not isinstance(v, bool) else v) for k, v in (b["mass"] or {}).items()}, legal=legal)
                 self.log(row)
@@ -264,6 +265,9 @@ class Campaign:
                 if x is None:
                     xf = self.root / "x" / f"{cid}.npy"
                     x = np.load(xf) if xf.exists() else None
+                if x is None and mname == "neat":                    # a NEAT genome, by id (process restarted)
+                    gid = next((d.get("neat_gid") for d in self.designs() if d["id"] == cid), None)
+                    x = (gid, None) if gid is not None else None
                 if x is None:
                     continue
                 info = {}

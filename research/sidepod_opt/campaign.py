@@ -33,7 +33,6 @@ import numpy as np
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
-sys.path.append(str(HERE.parents[0] / "sidepod_region"))
 import design as DS  # noqa: E402
 import evaluators as EV  # noqa: E402
 import methods as MT  # noqa: E402
@@ -74,10 +73,7 @@ class Campaign:
         key = json.dumps(spec, sort_keys=True)
         if key not in self._ev:
             k = spec["kind"]
-            if k == "lbm":
-                self._ev[key] = EV.LBMEvaluator(self.car, d_ref_N=spec.get("d_ref_N", 0.39), steps=spec.get("steps", 1200),
-                                                avg_from=spec.get("avg_from", 500), threads=spec.get("threads"))
-            elif k == "openfoam":
+            if k == "openfoam":
                 self._ev[key] = EV.OpenFOAMEvaluator(refs=spec.get("refs"), n_subdomains=spec.get("np", 2),
                                                      iters=spec.get("iters", 1000), mode=spec.get("mode", "auto"))
             elif k == "actions":

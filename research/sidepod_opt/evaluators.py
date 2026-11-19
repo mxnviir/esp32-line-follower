@@ -1,11 +1,9 @@
-"""Evaluators: car folder (or milled body) -> whole-car D20, L20 (N). One interface, five backends.
+"""Evaluators: car folder (or milled body) -> whole-car D20, L20 (N). One interface, four backends.
 
     ev.submit(cases)   cases: list of {"id", "folder", "body" (1 mm bool, optional), "fidelity"}
     ev.collect()       -> {id: {"D20_N", "L20_N", "ok", "info"}} for every finished case
 
 Backends
-  lbm         the cheap 3 mm lattice-Boltzmann tunnel (research/sidepod_region), local, ~40 s.
-              Re ~2e3: a SCREEN only; its ranking must pass the calibration gate (campaign.py).
   openfoam    Part 2's OpenFOAM pipeline (snappyHexMesh + simpleFoam kOmegaSST, rolling road,
               rotating wheels) on this machine. Needs OpenFOAM v2412 (`openfoam2412-default`).
   actions     the same OpenFOAM job, as a matrix on GitHub Actions (.github/workflows/sidepod_eval.yml),
@@ -17,7 +15,8 @@ Backends
               per-vertex drag sensitivities; turned into a race-time gradient on the design field.
               GATED: unusable until it passes campaign.gate_adjoint (it failed Part 3's wing test).
 
-Fidelity labels: "lbm", "medium", "fine", "resolved" (OpenFOAM mesh levels of Part 2).
+Only full-Reynolds RANS solvers (OpenFOAM, SimScale): the low-Re lattice-Boltzmann tunnel and its
+differentiable copy are gone (they ranked sidepods wrongly). Fidelity labels: "medium", "fine", "resolved" (OpenFOAM mesh levels of Part 2).
 Frozen states: a run can be warm-started from a frozen reference flow of THIS car (states A and B,
 made once by `campaign.py make-refs`). Small changes reshape the reference mesh (morph_from: the
 low-noise path, 0.09 ms in Part 2); big organic changes get a fresh mesh started from the
@@ -52,62 +51,6 @@ class Evaluator:
     def collect(self):
         out, self._done = self._done, {}
         return out
-
-
-# ---------------------------------------------------------------------- LBM
-class LBMEvaluator(Evaluator):
-    """The 3 mm tunnel. Drag is reported as N scaled so the ORIGINAL car reads d_ref_N (the tunnel's
-    Reynolds number is ~150x too low for absolute values; only changes are meaningful)."""
-    name = "lbm"
-
-    def __init__(self, car, d_ref_N=0.39, steps=1200, avg_from=500, threads=None):
-        super().__init__()
-        sys.path.append(str(REPO / "research/sidepod_region"))
-        if threads:
-            os.environ["NUMBA_NUM_THREADS"] = str(threads)
-        import tunnel as TN
-        self.TN, self.car, self.d_ref = TN, car, d_ref_N
-        self.steps, self.avg_from = steps, avg_from
-        self.half3 = _Coarse(car)
-        self.tun = TN.CarTunnel(self.half3)
-        self.state = None
-        self.base = None
-
-    def _ensure_state(self):
-        if self.state is not None:
-            return
-        b0 = self.half3.of(self.car.body0)
-        r = self.tun.measure(b0, 5000, 4000)                     # frozen state A for this car
-        self.state = r["state"]
-        rb = self.tun.measure(b0, self.steps, self.avg_from, warm=self.state)
-        self.base = (rb["drag"], rb["lift"])
-
-    def submit(self, cases):
-        self._ensure_state()
-        for c in cases:
-            body = c["body"]
-            r = self.tun.measure(self.half3.of(body), self.steps, self.avg_from, warm=self.state)
-            k = self.d_ref / self.base[0]
-            self._done[c["id"]] = {"D20_N": r["drag"] * k, "L20_N": (r["lift"] - self.base[1]) * k,
-                                   "ok": bool(np.isfinite(r["drag"])), "info": {"lbm_drag": float(r["drag"])}}
-
-
-class _Coarse:
-    """Adapter: the 1 mm whole-car grid -> the tunnel's 3 mm half grid (y >= 0)."""
-
-    def __init__(self, car):
-        import region as RG
-        self.RG, self.car = RG, car
-        self.j0 = int(np.searchsorted(car.ys, 0.0))
-        self.wheels = self.of(car.wheels)
-        self.body = self.of(car.body0)
-        nx, ny, nz = self.body.shape
-        self.xs = car.xs[: nx * 3].reshape(-1, 3).mean(1)
-        self.ys = car.ys[self.j0: self.j0 + ny * 3].reshape(-1, 3).mean(1)
-        self.zs = car.zs[: nz * 3].reshape(-1, 3).mean(1)
-
-    def of(self, B):
-        return self.RG.coarse(B[:, self.j0:, :])
 
 
 # ---------------------------------------------------------------------- OpenFOAM (local)
@@ -242,8 +185,7 @@ def _sh(cmd, cwd):
 class SimScaleEvaluator(Evaluator):
     """SimScale via its Python SDK (pip install simscale-sdk). Set up ONE template simulation in the
     web UI on the original car (imported as the same named STL solids: car, wheelF, wheelR, ...):
-    rolling road, rotating wheels, k-omega SST (or the LBM 'Incompressible LBM' solver, which meshes
-    itself and suits organic shapes), a 'Forces and moments' result control on the car + wheels.
+    rolling road, rotating wheels, k-omega SST, a 'Forces and moments' result control on the car + wheels.
     Each design: upload its STLs, import, clone the template with every face reference re-mapped
     BY SOLID NAME onto the new geometry, mesh, run, read the force plot.
 
@@ -253,7 +195,7 @@ class SimScaleEvaluator(Evaluator):
     name = "simscale"
 
     def __init__(self, project_id: str, template_sim_id: str, mesh_template_id: str | None = None,
-                 speed_mps=20.0, poll_s=60, symmetric_half=False, lbm=False, bodies=("car", "wheelF", "wheelR"),
+                 speed_mps=20.0, poll_s=60, symmetric_half=False, bodies=("car", "wheelF", "wheelR"),
                  force_result_name="Forces and moments"):
         super().__init__()
         import simscale_sdk as sim
@@ -265,7 +207,7 @@ class SimScaleEvaluator(Evaluator):
         self.api.rest_client.pool_manager.connection_pool_kw["timeout"] = 120
         self.project, self.template, self.mesh_template = project_id, template_sim_id, mesh_template_id
         self.speed, self.poll_s, self.half = speed_mps, poll_s, symmetric_half
-        self.lbm, self.bodies, self.force_name = lbm, list(bodies), force_result_name
+        self.bodies, self.force_name = list(bodies), force_result_name
         self.running = {}                                         # id -> (sim_id, run_id)
 
     def _upload(self, folder: Path, name: str):
@@ -281,7 +223,7 @@ class SimScaleEvaluator(Evaluator):
         req = sim.GeometryImportRequest(name=name, location=sim.GeometryImportRequestLocation(st.storage_id),
                                         format="STL", input_unit="m",
                                         options=sim.GeometryImportRequestOptions(facet_split=False, sewing=False, improve=True,
-                                                                                 optimize_for_lbm_solver=self.lbm))
+                                                                                 optimize_for_lbm_solver=False))
         gi = gi_api.import_geometry(self.project, req)
         while gi.status not in ("FINISHED", "CANCELED", "FAILED"):
             time.sleep(10)

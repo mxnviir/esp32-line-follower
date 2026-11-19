@@ -4,9 +4,10 @@ Finds the fastest **sidepod** for a fixed car: you give the STEP and the region,
 organic shapes, makes each one exactly as the CNC would, times it with real CFD, and scores it on
 **race time** with Part 2's race model. Nothing outside the region is ever changed.
 
-This is the full-scale version of `research/sidepod_region` (the 3 mm test bench). It keeps that
-bench's lattice-Boltzmann tunnel only as a cheap first screen, and only if the screen's ranking
-agrees with OpenFOAM's.
+This replaces `research/sidepod_region` (the 3 mm test bench). That bench's low-Reynolds
+lattice-Boltzmann tunnel and its differentiable copy are **removed**: they ranked sidepods wrongly
+(Re ~2×10³ against the car's ~2.7×10⁵). Every car here is timed by full-Reynolds RANS only:
+OpenFOAM (local or on Actions) or SimScale.
 
 ## How a design becomes a timed car
 
@@ -67,15 +68,13 @@ thrust sheet that gave the COM a large effect; that was wrong.
 
 | kind | what | cost | status |
 |---|---|---|---|
-| `lbm` | 3 mm lattice-Boltzmann tunnel, local | ~40 s | tested. Re ~2×10³: a screen only |
-| `openfoam` | Part 2's pipeline on this machine (snappyHexMesh + kOmegaSST, rolling road, rotating wheels), both frozen states | medium ~45 min, fine ~4.5 h on 2 cores | uses Part 2 code unchanged; not run here (no OpenFOAM in this container) |
+| `openfoam` | Part 2's pipeline on this machine (snappyHexMesh + kOmegaSST, rolling road, rotating wheels), both frozen states | medium: 38 min on 4 cores fresh, ~80 min on 2 cores on the morph path (measured on the trial car) | uses Part 2 code unchanged; run here on the trial car (`gate.py`) |
 | `actions` | the same OpenFOAM job as a GitHub Actions matrix (`.github/workflows/sidepod_eval.yml`), any number of accounts | parallel | batch → job script → collect tested in a dry run (a missing solver comes back as a recorded failure); workflow parses; real dispatch not run |
 | `simscale` | SimScale API, cloned from one template simulation set up in the web UI; face references re-mapped by solid name | per SimScale's pricing | calls checked against the SDK source and its examples, **not run** (no network to SimScale here). Install the SDK from GitHub (not on PyPI) |
 | `adjoint` | OpenFOAM adjoint (Part 2's ESI path, or DAFoam), per-vertex drag sensitivity → race-time gradient on the field | ~2 primal runs | ESI failed Part 3's wing test. Must pass `gate-adjoint` first |
 
 **SimScale:** good for every derivative-free method (`cma`, `bo`, `sail`, `neat`,
-`spsa`). It has no adjoint. Its Incompressible LBM solver meshes itself, which suits organic
-shapes well.
+`spsa`). It has no adjoint. Use its k-omega SST (RANS) solver, the same model as OpenFOAM.
 
 **Frozen states:** `campaign.py make-refs <dir> medium` builds states A and B of this car's
 original. Your existing frozen states are of the repo car and are not valid here.
@@ -89,10 +88,7 @@ original. Your existing frozen states are of the repo car and are not valid here
 
 | stage | what | budget (cars) | why |
 |---|---|---|---|
-| screen | all 6 methods × {original, lean} starts × 3 seeds on the LBM tunnel | 150 per run, ~5,400 cars, ~60 CPU-h | cheap breadth: which method, which kind of pod |
-| calibrate | 20 screen cars spread over the whole range, OpenFOAM medium | 20 | does the LBM rank cars like OpenFOAM? |
-| gate_lbm | Spearman ≥ 0.7, else **stop** | 0 | a failed screen must not steer anything |
-| search | multi-fidelity BO and SAIL on OpenFOAM medium, screen results as prior | 60 per run, 240 | the real search |
+| search | BO and SAIL on OpenFOAM medium, {original, lean} starts | 60 per run, 120 | the real search |
 | fine | best 6 at the fine mesh, both states | 6 | — |
 | gate_medium | Spearman ≥ 0.8 between medium and fine | 0 | — |
 | polish | SPSA level set (or adjoint after `gate-adjoint` passes) on fine | 30 | final local shape |
@@ -105,7 +101,7 @@ about 2 weeks.
 
 ```bash
 pip install numpy scipy scikit-image trimesh numba cma neat-python scikit-learn jax cadquery-ocp
-python campaign.py init  runs/trial config.local_test.json   # voxelises the STEP once (~30 s)
+python campaign.py init  runs/trial config.example.json      # voxelises the STEP once (~30 s)
 python campaign.py run   runs/trial                         # local evaluators: loops to the end
 python campaign.py report runs/trial                        # runs.md, convergence.png, best.png, best/<car folders>
 # remote evaluators (actions / simscale): run `tick` from cron; each call collects, tells, asks, submits
@@ -124,18 +120,14 @@ and thrust line are all there.
   mid-wheelbase at z 16 mm.
 - **Thrust line:** z 30 mm; the cartridge sticks out 13 mm (the STEP has no bore).
 - **Lead container:** at x 130, z 21 mm.
-- **D20 scale for the LBM screen:** the original is set to 0.39 N. Only changes from the
-  original mean anything there.
 
 ## What was tested here (2026-11-19)
 
 - **Geometry, milling, checks, weighing and STL export** (`car_half.stl`, wheels, `body_full.stl`
   all watertight; the half-car volume is exactly half the whole) on the trial car.
-- **A full local campaign on the LBM tunnel** (`config.local_test.json`), where every method ran:
-  - 22 cars built, milled, checked and timed; all legal; car mass 48.2–51.3 g.
-  - The original timed as the reference at 0.7546 s.
-  - Report written (`runs.md`, `convergence.png`, `best.png`, `best/` STL folders).
-  - The calibration gate correctly refused to pass on too few cars.
+- An earlier end-to-end campaign ran on the LBM tunnel; that tunnel is now removed, and the
+  campaign has **not** been re-run end to end on OpenFOAM yet.
 - **Actions dry run**: batch written, `eval_one.py` run, results collected.
-- **Not run:** OpenFOAM (not installed in this container), SimScale (no access), adjoint
-  (needs OpenFOAM, and must pass the gate first).
+- **OpenFOAM on the trial car** (`gate.py`, results in `gate_results/`): the original converged
+  at D20 0.366 N (whole car), and the adjoint accuracy test is running.
+- **Not run:** SimScale (no access from here).

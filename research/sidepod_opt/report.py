@@ -47,7 +47,6 @@ def report(c, n_best=6):
         if len(best) == n_best:
             break
     sys_path = c.root.parents[0]
-    import sys; sys.path.append(str(Path(__file__).resolve().parents[1] / "sidepod_region"))
     from render import surf, setup
     car = c.car
     o = (car.xs[0] - car.h / 2, car.ys[0] - car.h / 2, car.zs[0] - car.h / 2)

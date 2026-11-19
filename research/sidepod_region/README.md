@@ -1,3 +1,8 @@
+> **SUPERSEDED (2026-11-19).** This 3 mm test bench and its lattice-Boltzmann tunnel (and the
+> differentiable JAX copy) run at Re ~2×10³, about 100× below the real car. They ranked sidepods
+> wrongly and are no longer used anywhere. The working version is `research/sidepod_opt`, which
+> times every car with full-Reynolds OpenFOAM or SimScale only. Kept for the record.
+
 # Sidepod region: which organic search finds the fastest sidepod?
 
 Input: the team's `cad/trial_car.step` (body + 4 wheels) and a sketch circling the boxy block

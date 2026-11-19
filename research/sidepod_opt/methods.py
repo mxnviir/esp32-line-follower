@@ -5,7 +5,7 @@ them in parallel and a campaign can stop and resume.
     xs = m.ask(n)                 -> list of parameter vectors (np.ndarray)
     m.tell(xs, values, info)      values: race time (s) or None for an illegal design (no CFD)
 
-Multi-fidelity (BO, SAIL): m.add_prior(xs, values, fidelity) feeds cheaper results (the LBM screen)
+Multi-fidelity (BO, SAIL): m.add_prior(xs, values, fidelity) feeds cheaper results (OpenFOAM medium under fine)
 into the surrogate as a second fidelity (GP on [x, s], s = 0 cheap, 1 target): an auto-regressive
 co-kriging stand-in that learns how the cheap ranking maps onto the expensive one.
 """

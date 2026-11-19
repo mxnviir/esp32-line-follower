@@ -7,3 +7,4 @@ lattice_s2 best 0.6243266033707873 used 200 illegal 89
 param_s2 best 0.6160257505551707 used 200 illegal 27
 random_s2 best 0.7358290421845085 used 200 illegal 82
 cppn-neat_s3 best 0.6843041624904088 used 200 illegal 67
+param_s3 best 0.6165115898184055 used 200 illegal 15

@@ -1,0 +1,36 @@
+{
+ "_comment": "Production plan for one sidepod region. Budgets are cars timed per run. See README.md.",
+ "h_mm": 1.0,
+ "car": {"cargo_z": [17.0, 27.0]},
+ "stages": [
+  {"name": "screen", "type": "search", "fidelity": "lbm",
+   "evaluator": {"kind": "lbm", "steps": 1200, "avg_from": 500, "threads": 2},
+   "starts": ["original", "lean"], "seeds": [1, 2, 3], "budget": 150, "batch": 6,
+   "methods": {"random": {}, "cma": {"popsize": 12, "sigma": 1.2}, "bo": {"n_init": 12}, "sail": {"n_init": 12},
+               "spsa": {"rep": "levelset"}, "neat": {}}},
+
+  {"name": "calibrate", "type": "pick", "from": ["screen"], "how": "spread", "n": 20, "fidelity": "medium",
+   "evaluator": {"kind": "actions", "repos": ["OWNER/stem-racing-compute"], "res": "medium", "per_job": 1}},
+  {"name": "gate_lbm", "type": "gate", "high": "calibrate", "min_spearman": 0.7},
+
+  {"name": "search", "type": "search", "fidelity": "medium", "prior_from": ["screen"],
+   "evaluator": {"kind": "actions", "repos": ["OWNER/stem-racing-compute"], "res": "medium", "per_job": 1},
+   "starts": ["original", "lean"], "seeds": [1], "budget": 60, "batch": 10,
+   "methods": {"bo": {"n_init": 0}, "sail": {"n_init": 0}}},
+
+  {"name": "fine", "type": "pick", "from": ["search", "calibrate"], "how": "best", "n": 6, "fidelity": "fine",
+   "evaluator": {"kind": "actions", "repos": ["OWNER/stem-racing-compute"], "res": "fine", "per_job": 1}},
+  {"name": "gate_medium", "type": "gate", "high": "fine", "min_spearman": 0.8},
+
+  {"name": "polish", "type": "search", "fidelity": "fine",
+   "evaluator": {"kind": "actions", "repos": ["OWNER/stem-racing-compute"], "res": "fine", "per_job": 1},
+   "starts": ["original"], "seeds": [1], "budget": 30, "batch": 2,
+   "methods": {"spsa": {"rep": "levelset", "c_mm": 1.0}}},
+
+  {"name": "confirm", "type": "pick", "from": ["fine", "polish"], "how": "best", "n": 2, "fidelity": "resolved",
+   "evaluator": {"kind": "actions", "repos": ["OWNER/stem-racing-compute"], "res": "resolved", "per_job": 1}}
+ ],
+ "_simscale_alternative": {"kind": "simscale", "project_id": "...", "template_sim_id": "...", "mesh_template_id": "..."},
+ "_adjoint_alternative_for_polish": {"methods": {"adjoint": {"rep": "levelset"}}, "evaluator": {"kind": "adjoint", "backend": "dafoam", "res": "fine"},
+                                     "_note": "only after `campaign.py gate-adjoint` passes"}
+}

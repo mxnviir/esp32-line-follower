@@ -70,6 +70,11 @@ class OpenFOAMEvaluator(Evaluator):
                                                     self.np, self.iters, self.cfd, self.mode)
 
 
+def _latest_run_dir():
+    runs = sorted((P2 / "cfd_case_template" / "runs").glob(f"run_{os.getpid()}_*"), key=lambda p: p.stat().st_mtime)
+    return runs[-1] if runs else None
+
+
 def run_openfoam_case(folder: Path, res: str, refs: dict, n_sub=2, iters=1000, cfd=None, mode="auto") -> dict:
     """One car, every frozen state, averaged (Part 2 method A). mode: "morph" (reshape the
     reference mesh: lowest noise, small changes only), "warm" (fresh mesh, flow mapped from the
@@ -91,12 +96,27 @@ def run_openfoam_case(folder: Path, res: str, refs: dict, n_sub=2, iters=1000, c
             else:
                 k2.update(warm_from=refs[s])
         try:
-            half, health = run_half_car_cfd(str(body), n_subdomains=n_sub, extra_surfaces=SW.extra_surfaces(folder), **k2)
+            half, health = run_half_car_cfd(str(body), n_subdomains=n_sub, extra_surfaces=SW.extra_surfaces(folder),
+                                            keep_run_dir=True, **k2)
+            run = _latest_run_dir()
+            fell_back = bool(s and run and (run / "MORPH_FALLBACK").exists())   # left the reference mesh
+            if run:
+                import shutil
+                shutil.rmtree(run, ignore_errors=True)
             full = half.to_full_car()
             per[s or "plain"] = {"D20_N": full.D20, "L20_N": full.L, "converged": bool(health.converged),
-                                 "residual_p": health.residual_final, "force_osc": health.force_oscillation}
+                                 "residual_p": health.residual_final, "force_osc": health.force_oscillation,
+                                 "morph_fallback": fell_back}
+            if fell_back and mode == "morph":                     # morph only: a fresh mesh is not this result
+                per[s]["error"] = "reshaped mesh failed checkMesh (fresh-mesh noise); mode morph"
+                per[s].pop("D20_N")
         except Exception as e:                                    # a failed case is a result, not a crash
             per[s or "plain"] = {"error": repr(e)[:400]}
+    return combine_states(per)
+
+
+def combine_states(per: dict) -> dict:
+    """Per-state results -> one car result (Part 2 method A: mean over states)."""
     good = [v for v in per.values() if "D20_N" in v]
     if not good:
         return {"D20_N": None, "L20_N": None, "ok": False, "info": per}
@@ -107,16 +127,26 @@ def run_openfoam_case(folder: Path, res: str, refs: dict, n_sub=2, iters=1000, c
 
 # ---------------------------------------------------------------------- OpenFOAM on GitHub Actions
 class ActionsEvaluator(Evaluator):
-    """Writes the batch into jobs/<campaign>/<batch>/ (car folders + batch.json), commits it to
-    `branch`, and dispatches .github/workflows/sidepod_eval.yml on each repo in `repos` (round
-    robin, for several accounts). collect() downloads finished runs' `sidepod-results-*` artifacts.
-    dry_run=True only writes the batch (for checking, or for dispatching by hand)."""
+    """OpenFOAM on GitHub Actions (.github/workflows/sidepod_eval.yml), any number of repos.
+
+    submit(): zips the batch (car folders + batch.json) and uploads it as an asset of the release
+    `release` in the chosen repo (round robin), then dispatches the workflow on `ref` (the branch
+    that holds this code and the workflow). Nothing is committed. The workflow runs ONE job per
+    (car group, frozen state), so a state never shares the 6 h job limit with another.
+    collect(): idempotent. Every completed run of a pending batch is downloaded once, into
+    results/<run id>/; per-state results are combined (mean of states) when all states of a car
+    are in. A car whose run finished without a result (job failed, timed out, cancelled) comes
+    back as a failed car (ok False), so the campaign tells the method and moves on.
+    dry_run=True only writes the batch (results can be dropped into <batch>/results/ by hand)."""
     name = "actions"
 
-    def __init__(self, jobs_dir: Path, repos: list, branch="sidepod-jobs", res="medium", dry_run=False, per_job=1):
+    def __init__(self, jobs_dir: Path, repos: list, ref="main", res="medium", dry_run=False, per_job=1,
+                 release="sidepod-jobs", refs_tag="", states=None, mode="auto", iters=1000):
         super().__init__()
-        self.jobs, self.repos, self.branch, self.res, self.dry, self.per_job = Path(jobs_dir), repos, branch, res, dry_run, per_job
-        self.pending = {}                                         # batch -> {"repo", "ids", "dispatched"}
+        self.jobs, self.repos, self.ref, self.res, self.dry, self.per_job = Path(jobs_dir), repos, ref, res, dry_run, per_job
+        self.release, self.refs_tag, self.mode, self.iters = release, refs_tag, mode, iters
+        self.states = list(states or (["A", "B"] if refs_tag else ["plain"]))
+        self.pending = {}                                         # batch -> {"repo", "ids", "dispatched", "runs_done"}
         self.state_file = self.jobs / "actions_state.json"
         if self.state_file.exists():
             self.pending = json.loads(self.state_file.read_text())
@@ -124,47 +154,70 @@ class ActionsEvaluator(Evaluator):
     def submit(self, cases):
         if not cases:
             return
-        batch = time.strftime("b%Y%m%d-%H%M%S")
+        import shutil
+        batch = time.strftime("b%Y%m%d-%H%M%S") + f"-{os.getpid() % 1000:03d}"
         bdir = self.jobs / batch
         bdir.mkdir(parents=True, exist_ok=True)
-        import shutil
         ids = []
         for c in cases:
             dst = bdir / c["id"]
             if dst.exists():
                 shutil.rmtree(dst)
-            shutil.copytree(c["folder"], dst, ignore=shutil.ignore_patterns("*_raw.stl", "body_full.stl", "_body_half.stl"))
+            shutil.copytree(c["folder"], dst, ignore=shutil.ignore_patterns("*_raw.stl", "body_full.stl", "_body_half.stl", "*.npy"))
             ids.append(c["id"])
         groups = [ids[i:i + self.per_job] for i in range(0, len(ids), self.per_job)]
-        (bdir / "batch.json").write_text(json.dumps({"res": self.res, "groups": groups}, indent=1))
+        matrix = [{"group": g, "state": s} for g in range(len(groups)) for s in self.states]
+        (bdir / "batch.json").write_text(json.dumps({"res": self.res, "groups": groups, "states": self.states,
+                                                     "matrix": matrix}, indent=1))
         repo = self.repos[len(self.pending) % len(self.repos)] if self.repos else None
-        self.pending[batch] = {"repo": repo, "ids": ids, "dispatched": False}
+        self.pending[batch] = {"repo": repo, "ids": ids, "dispatched": False, "runs_done": []}
         if not self.dry and repo:
-            rel = bdir.relative_to(REPO)
-            _sh(["git", "add", str(bdir)], REPO)
-            _sh(["git", "commit", "-q", "-m", f"sidepod jobs {batch}"], REPO)
-            _sh(["git", "push", "-q", "origin", f"HEAD:{self.branch}"], REPO)
-            _sh(["gh", "workflow", "run", "sidepod_eval.yml", "-R", repo, "--ref", self.branch,
-                 "-f", f"batch={rel}", "-f", f"res={self.res}"], REPO)
+            z = shutil.make_archive(str(self.jobs / batch), "zip", root_dir=self.jobs, base_dir=batch)
+            if subprocess.run(["gh", "release", "view", self.release, "-R", repo], capture_output=True).returncode:
+                _sh(["gh", "release", "create", self.release, "-R", repo, "--prerelease", "--title", "sidepod job inputs",
+                     "--notes", "Batch inputs for sidepod_eval.yml (zipped car folders). Safe to delete old assets."], REPO)
+            _sh(["gh", "release", "upload", self.release, z, "-R", repo, "--clobber"], REPO)
+            _sh(["gh", "workflow", "run", "sidepod_eval.yml", "-R", repo, "--ref", self.ref,
+                 "-f", f"batch={batch}", "-f", f"release={self.release}", "-f", f"res={self.res}",
+                 "-f", f"refs_tag={self.refs_tag}", "-f", f"mode={self.mode}", "-f", f"iters={self.iters}"], REPO)
             self.pending[batch]["dispatched"] = True
+            self.pending[batch]["submitted"] = time.time()
         self._save()
 
     def collect(self):
         for batch, p in list(self.pending.items()):
-            if self.dry or not p["repo"]:
-                rdir = self.jobs / batch / "results"              # results dropped in by hand
-            else:
-                rdir = self.jobs / batch / "results"
+            rdir = self.jobs / batch / "results"
+            finished_runs = 0
+            if not self.dry and p["repo"]:
                 runs = json.loads(_sh(["gh", "run", "list", "-R", p["repo"], "-w", "sidepod_eval.yml", "--json",
-                                       "databaseId,status,conclusion,displayTitle", "-L", "50"], REPO) or "[]")
+                                       "databaseId,status,conclusion,displayTitle", "-L", "200"], REPO) or "[]")
                 for r in runs:
-                    if batch in r["displayTitle"] and r["status"] == "completed":
-                        _sh(["gh", "run", "download", str(r["databaseId"]), "-R", p["repo"], "-p", "sidepod-results-*",
-                             "-D", str(rdir)], REPO)
+                    if batch not in r["displayTitle"] or r["status"] != "completed":
+                        continue
+                    finished_runs += 1
+                    rid = str(r["databaseId"])
+                    if rid in p["runs_done"]:
+                        continue
+                    d = rdir / rid
+                    if r["conclusion"] in ("success", "failure", "timed_out", "cancelled"):
+                        shutil_rm(d)
+                        subprocess.run(["gh", "run", "download", rid, "-R", p["repo"], "-p", "sidepod-results-*",
+                                        "-D", str(d)], cwd=REPO, capture_output=True)   # none on a run that died early
+                    p["runs_done"].append(rid)
+            per = {}
             for f in rdir.rglob("*.json") if rdir.exists() else []:
                 d = json.loads(f.read_text())
                 if d.get("id") in p["ids"]:
-                    self._done[d["id"]] = d
+                    per.setdefault(d["id"], {})[d.get("state", "plain")] = d.get("result", d)
+            closed = finished_runs > 0 or self.dry
+            for cid in p["ids"]:
+                got = per.get(cid, {})
+                if all(s in got for s in self.states):
+                    self._done[cid] = combine_states(got)
+                elif closed and not self.dry:
+                    for s in self.states:
+                        got.setdefault(s, {"error": "no result from the Actions run (job failed, timed out or cancelled)"})
+                    self._done[cid] = combine_states(got)
             if all(i in self._done for i in p["ids"]):
                 self.pending.pop(batch)
         self._save()
@@ -173,6 +226,11 @@ class ActionsEvaluator(Evaluator):
     def _save(self):
         self.jobs.mkdir(parents=True, exist_ok=True)
         self.state_file.write_text(json.dumps(self.pending, indent=1))
+
+
+def shutil_rm(d: Path):
+    import shutil
+    shutil.rmtree(d, ignore_errors=True)
 
 
 def _sh(cmd, cwd):

@@ -77,8 +77,10 @@ class Campaign:
                 self._ev[key] = EV.OpenFOAMEvaluator(refs=spec.get("refs"), n_subdomains=spec.get("np", 2),
                                                      iters=spec.get("iters", 1000), mode=spec.get("mode", "auto"))
             elif k == "actions":
-                self._ev[key] = EV.ActionsEvaluator(self.root / "jobs", spec.get("repos", []), spec.get("branch", "sidepod-jobs"),
-                                                    spec.get("res", "medium"), spec.get("dry_run", False), spec.get("per_job", 1))
+                self._ev[key] = EV.ActionsEvaluator(self.root / "jobs", spec.get("repos", []), spec.get("ref", "main"),
+                                                    spec.get("res", "medium"), spec.get("dry_run", False), spec.get("per_job", 1),
+                                                    release=spec.get("release", "sidepod-jobs"), refs_tag=spec.get("refs_tag", ""),
+                                                    mode=spec.get("mode", "auto"), iters=spec.get("iters", 1000))
             elif k == "simscale":
                 self._ev[key] = EV.SimScaleEvaluator(spec["project_id"], spec["template_sim_id"], spec.get("mesh_template_id"),
                                                      symmetric_half=spec.get("half", False))

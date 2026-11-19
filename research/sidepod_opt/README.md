@@ -69,7 +69,7 @@ thrust sheet that gave the COM a large effect; that was wrong.
 | kind | what | cost | status |
 |---|---|---|---|
 | `openfoam` | Part 2's pipeline on this machine (snappyHexMesh + kOmegaSST, rolling road, rotating wheels), both frozen states | medium: 38 min on 4 cores fresh, ~80 min on 2 cores on the morph path (measured on the trial car) | uses Part 2 code unchanged; run here on the trial car (`gate.py`) |
-| `actions` | the same OpenFOAM job as a GitHub Actions matrix (`.github/workflows/sidepod_eval.yml`), any number of accounts | parallel | batch → job script → collect tested in a dry run (a missing solver comes back as a recorded failure); workflow parses; real dispatch not run |
+| `actions` | the same OpenFOAM job on GitHub Actions (`.github/workflows/sidepod_eval.yml`), any number of repos. The batch goes up as a release asset (nothing committed); one job per car group **and** frozen state (each state gets its own 6 h limit); collect is idempotent and a failed job comes back as a failed car | parallel | dry run and mocked `gh` tested; real dispatch not run |
 | `simscale` | SimScale API, cloned from one template simulation set up in the web UI; face references re-mapped by solid name | per SimScale's pricing | calls checked against the SDK source and its examples, **not run** (no network to SimScale here). Install the SDK from GitHub (not on PyPI) |
 | `adjoint` | OpenFOAM adjoint (Part 2's ESI path, or DAFoam), per-vertex drag sensitivity → race-time gradient on the field | ~2 primal runs | ESI failed Part 3's wing test. Must pass `gate-adjoint` first |
 

@@ -9,3 +9,4 @@ random_s2 best 0.7358290421845085 used 200 illegal 82
 cppn-neat_s3 best 0.6843041624904088 used 200 illegal 67
 param_s3 best 0.6165115898184055 used 200 illegal 15
 lattice_s3 best 0.6025445267934558 used 200 illegal 83
+random_s3 best 0.6771929532122067 used 200 illegal 81

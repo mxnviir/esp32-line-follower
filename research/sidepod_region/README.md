@@ -13,23 +13,33 @@ Per side, mirrored:
   T7.9.3 wedge ahead of the rear wheel (5 mm, 45°), and everything above z 27 mm from x 115 mm
   forward (T4.4.2: the halo, at x 120–160, z 28–38, must stay visible from the side).
 - **Forced solid**: the T4.2 virtual cargo (60 mm long, 55 → 10 mm wide, 10 mm tall), wide
-  end forward, x 76–136, z 7.2–17.2, its top on the spine.
+  end forward, x 76–136, z 17–27: the layer where the trial car is solid across its full width.
+  The trial car has a tunnel under the spine (no foam at |y| < 15 mm below z 17.5 mm); an
+  earlier placement at z 7–17 filled that tunnel with 2.5 g of forced foam, so those runs were
+  discarded (`results/old_cargo_low/`). **Assumed: confirm the team's cargo position.**
 - **Kept as drawn**: the spine (the body at |y| ≤ 13.5 mm and z ≥ 17 mm: deck, cockpit, halo)
   and the whole body outside the box.
 
 The trial box already clears the T7.9 wedges (its corners are chamfered in plan).
 
 Every design passes the same finishing step: rule zones forced, cargo forced, closed and opened
-by one 3 mm cell (no slivers or notches the cutter can't make), one piece with the spine.
+by one 3 mm cell, one piece with the spine. Then it is **milled** (`milling.py`): rebuilt at
+1 mm with a smooth surface and cut with Part 1's own rule (team process: 3-axis, 6.35 mm ball
+end, setups top/bottom/left/right). Air the ball can't reach stays foam, sealed voids stay foam,
+loose pieces are dropped. **The milled body is what gets weighed and put in the tunnel.**
+
+Why: scoring the 3 mm design directly missed the cutter's 3.175 mm corner fillets, which add
+0.5–1.7 g of foam on the real part, and a few designs had small undercuts. `check_outputs.py`
+checks every output for weight, pieces, sealed voids, undercuts, walls under 3 mm, wheel gap
+and track clearance.
 
 ## The scorer: race time, not drag (`score.py`)
 
 - **Drag and lift**: from the tunnel, as changes from the original car run the same way, scaled
   to D20 = 0.39 N for the original.
-- **Mass**: the 48.0 g floor + 0.2 g margin is held by lead in the halo container (T1.22,
-  1.39 cm³ ≈ 15.7 g). Less foam → more lead. A design needing more lead than fits is
-  underweight → illegal. More foam than the original → the car is over 48.2 g and pays
-  16.4 ms/g.
+- **Mass**: no upper limit. A heavy car is legal and pays 16.4 ms/g through the race model.
+  Only the T3.6 floor applies: a car lighter than 48.0 g (+0.2 g margin) gets lead in the halo
+  container (T1.22, 1.39 cm³ ≈ 15.7 g). A design needing more lead than fits is illegal.
 - **COM**: exact, from the original body + the design's change + fixed parts + lead.
 - All of it goes through Part 2's `race_objective` (pitch balance, guide friction).
 

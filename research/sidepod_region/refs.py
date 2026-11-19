@@ -28,21 +28,21 @@ def designs():
 
 
 if __name__ == "__main__":
+    import milling as ML
     out = {}
     D = designs()
+    D = {k: ML.to_half3(car, ML.mill(car, v)[0]) for k, v in D.items()}   # everything as milled
     # first the original from A to set the scale
     bp = HERE / "results/base.json"
     if bp.exists():
         base = json.loads(bp.read_text())
     else:
-        r = tun.measure(car.original, S, AV, warm=A)
+        r = tun.measure(D["original"], S, AV, warm=A)
         base = {"drag_A": float(r["drag"]), "lift_A": float(r["lift"])}
         bp.write_text(json.dumps(base))
     sc = Scorer(car, base["drag_A"], base["lift_A"])
     for name, body in D.items():
-        if name == 'original' and len(sys.argv) > 1:
-            continue
-        m = sc.mass(body)
+        m = ML.mass_1mm(ML.mill(car, body)[0], sc)
         row = dict(mass=m)
         for st, warm in (("A", A), ("B", B)):
             r = tun.measure(body, S, AV, warm=warm)

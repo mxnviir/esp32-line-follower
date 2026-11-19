@@ -11,7 +11,8 @@ Region (per side), from the team's sketch and the 2026-27 regulations:
           above z = 27 for x >= 115 (T4.4.2: the halo must be seen from the side) -> AIR
   fixed   the spine: original body at |y| <= 13.5, z >= 17 (deck, halo, cockpit)
   must    T4.2 virtual cargo: 60 mm wedge, 55 -> 10 mm wide, 10 mm tall, wide end
-          forward, x 76..136, z 7.2..17.2 (top on the spine floor)   -> forced SOLID
+          forward, x 76..136, z 17..27: the layer the trial car is solid across its full
+          width (the car has a tunnel under the spine below z 17.5)  -> forced SOLID
 Everything else of the original body outside the region is kept as it is.
 """
 from __future__ import annotations
@@ -28,7 +29,7 @@ REGION_YMAX = 32.5
 REGION_Z = (1.5, 40.0)
 SPINE_Y, SPINE_Z = 13.5, 17.0
 CARGO_X = (76.0, 136.0)                  # narrow end at 76, wide end (55 mm) at 136
-CARGO_Z = (7.2, 17.2)
+CARGO_Z = (17.0, 27.0)                   # the layer that is solid full-width on the trial car
 FOAM_G_CM3 = 0.163
 HALO_X, HALO_ZMIN = (115.0, 160.0), 27.0      # halo ring x 120-160, z 28-38 on this STEP
 

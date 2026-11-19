@@ -54,12 +54,15 @@ class Problem:
         return f
 
     def evaluate(self, field, tag=""):
-        """Race time (s) of the design, or None if illegal (no tunnel run)."""
+        """Race time (s) of the design AS MILLED, or None if illegal (no tunnel run)."""
+        import milling as ML
         body = self.car.finish(field)
         if body is None:
             self.illegal += 1
             return None, None
-        m = self.scorer.mass(body)
+        B1, _rep = ML.mill(self.car, body)                     # what the CNC leaves
+        m = ML.mass_1mm(B1, self.scorer)
+        body = ML.to_half3(self.car, B1)
         if not m["mass_legal"]:
             self.illegal += 1
             return None, body

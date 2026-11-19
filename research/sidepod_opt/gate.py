@@ -180,31 +180,61 @@ def latest_run_of(pid):
     return str(runs[-1]) if runs else None
 
 
+def adjoint_on_base(base):
+    """The adjoint as saved is one value per STL triangle CORNER, each the value of the nearest
+    CFD surface point (openfoam_adjoint.map_sensitivity_to_stl_vertices). Each CFD point is repeated
+    on ~16 corners, so summing over corners counts it ~16 times. Two readings, recovered without
+    re-running:
+      per_point: each CFD point's value is dD/dn for that point's patch of surface; the points are
+                 recovered as the unique values (centroid of their corners) and counted once.
+      density:   the value is dD/dn per unit area; integrated over the STL, vertex area x mean of
+                 its corners.
+    The measured slope says which is right (~1)."""
+    s = np.load(R / "adjoint_sens.npy")
+    nz = s != 0
+    u, inv = np.unique(s[nz], return_inverse=True)
+    corners = base.vertices[base.faces].reshape(-1, 3)
+    cnt = np.bincount(inv)
+    loc = np.stack([np.bincount(inv, weights=corners[nz, d]) / cnt for d in range(3)], 1)
+    vid = base.faces.reshape(-1)
+    g = np.bincount(vid, weights=s, minlength=len(base.vertices)) / np.bincount(vid, minlength=len(base.vertices))
+    area = np.bincount(vid, weights=np.repeat(base.area_faces / 3, 3), minlength=len(base.vertices))
+    from scipy.spatial import cKDTree
+    near = cKDTree(base.vertices).query(loc)[1]
+    return u, near, g, area
+
+
 def cmd_judge():
-    """Measured dD (bump - zero, morph path) vs adjoint prediction sum(rho * s_v * dn_v)."""
+    """Measured dD (bump - zero, morph path) vs adjoint prediction rho * sum(s dn)."""
     import trimesh
     zero = json.loads((R / "zero.json").read_text())["D20_half_N"]
-    s = np.load(R / "adjoint_sens.npy"); V = np.load(R / "adjoint_verts.npy")
+    base_run = json.loads((R / "base.json").read_text())["D20_half_N"]
     base = trimesh.load(ORIG / "car_half.stl")
-    if len(base.vertices) != len(V) or not np.allclose(base.vertices, V, atol=1e-9):
-        raise SystemExit("adjoint vertices differ from the bump base mesh: map them first")
+    if len(base.faces) * 3 != len(np.load(R / "adjoint_sens.npy")):
+        raise SystemExit("adjoint corners differ from the bump base mesh")
+    u, near, g, area = adjoint_on_base(base)
     rows = []
     for k in CENTRES:
         p = R / f"bump_{k}.json"
         if not p.exists():
             continue
         b = json.loads(p.read_text())
-        w = np.load(G / f"bump_{k}" / "move_m.npy")
         dn = ((trimesh.load(G / f"bump_{k}" / "car_half.stl").vertices - base.vertices) * base.vertex_normals).sum(1)
-        pred = float(1.225 * (s * dn).sum())                # the move as actually made, along the normals
-        rows.append({"bump": k, "measured_mN": (b["D20_half_N"] - zero) * 1e3, "predicted_mN": pred * 1e3,
-                     "usable": not b["morph_fallback"] and b["converged"]})
+        rows.append({"bump": k, "measured_mN": (b["D20_half_N"] - zero) * 1e3,
+                     "pred_per_point_mN": float(1.225 * (u * dn[near]).sum()) * 1e3,
+                     "pred_density_mN": float(1.225 * (g * dn * area).sum()) * 1e3,
+                     "dV_mm3": float((dn * area).sum() * 1e9),
+                     "usable": bool(not b["morph_fallback"] and b["converged"])})
     use = [r for r in rows if r["usable"]]
-    out = {"rows": rows}
+    out = {"zero_minus_base_mN (one noise sample)": (zero - base_run) * 1e3, "rows": rows}
     if len(use) >= 3:
-        m = np.array([r["measured_mN"] for r in use]); p = np.array([r["predicted_mN"] for r in use])
-        out.update(pearson_r=float(np.corrcoef(m, p)[0, 1]), signs=f"{int((np.sign(m) == np.sign(p)).sum())}/{len(use)}",
-                   slope=float((m @ p) / (p @ p)), passed=bool(np.corrcoef(m, p)[0, 1] >= 0.9 and (np.sign(m) == np.sign(p)).mean() >= 0.9))
+        m = np.array([r["measured_mN"] for r in use])
+        for key in ("pred_per_point_mN", "pred_density_mN"):
+            pr = np.array([r[key] for r in use])
+            rr = float(np.corrcoef(m, pr)[0, 1]); sg = (np.sign(m) == np.sign(pr))
+            out[key.replace("_mN", "")] = {"pearson_r": rr, "signs": f"{int(sg.sum())}/{len(use)}",
+                                         "slope_measured_per_predicted": float((m @ pr) / (pr @ pr)),
+                                         "passed": bool(rr >= 0.9 and sg.mean() >= 0.9)}
     (R / "judge.json").write_text(json.dumps(out, indent=1))
     print(json.dumps(out, indent=1))
 

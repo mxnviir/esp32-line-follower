@@ -35,12 +35,6 @@ class Method:
                 self.X.append(np.asarray(x)); self.Y.append(float(y))
 
 
-class Random(Method):
-    def ask(self, n):
-        s = self.o.get("sigma", 1.0)
-        return [self.x0 + self.rng.normal(0, s, self.x0.size) for _ in range(n)]
-
-
 class CMA(Method):
     def __init__(self, rep, start, rng, **o):
         super().__init__(rep, start, rng, **o)
@@ -271,7 +265,7 @@ class NEAT(Method):
             self.queue = list(p.population.items()); self.scored = {}
 
 
-MAKERS = {"random": Random, "cma": CMA, "bo": TuRBO, "sail": SAIL, "spsa": SPSA, "adjoint": GradientDescent, "neat": NEAT}
+MAKERS = {"cma": CMA, "bo": TuRBO, "sail": SAIL, "spsa": SPSA, "adjoint": GradientDescent, "neat": NEAT}
 
 
 def make(name, rep, start, rng, **o):

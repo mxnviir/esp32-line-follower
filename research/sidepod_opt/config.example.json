@@ -6,7 +6,7 @@
   {"name": "screen", "type": "search", "fidelity": "lbm",
    "evaluator": {"kind": "lbm", "steps": 1200, "avg_from": 500, "threads": 2},
    "starts": ["original", "lean"], "seeds": [1, 2, 3], "budget": 150, "batch": 6,
-   "methods": {"random": {}, "cma": {"popsize": 12, "sigma": 1.2}, "bo": {"n_init": 12}, "sail": {"n_init": 12},
+   "methods": {"cma": {"popsize": 12, "sigma": 1.2}, "bo": {"n_init": 12}, "sail": {"n_init": 12},
                "spsa": {"rep": "levelset"}, "neat": {}}},
 
   {"name": "calibrate", "type": "pick", "from": ["screen"], "how": "spread", "n": 20, "fidelity": "medium",

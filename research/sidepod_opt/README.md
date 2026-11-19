@@ -56,7 +56,6 @@ thrust sheet that gave the COM a large effect; that was wrong.
 
 | name | representation | how it moves | needs |
 |---|---|---|---|
-| `random` | control lattice (10×4×5 + blend) | none: the bar to beat | any evaluator |
 | `cma` | lattice | CMA-ES | any |
 | `bo` | lattice | GP + expected improvement in a trust region; **multi-fidelity**: cheaper results enter as a second fidelity | any |
 | `sail` | lattice | MAP-Elites on the GP (foam volume × pod height); returns several *different* good pods | any |
@@ -74,7 +73,7 @@ thrust sheet that gave the COM a large effect; that was wrong.
 | `simscale` | SimScale API, cloned from one template simulation set up in the web UI; face references re-mapped by solid name | per SimScale's pricing | calls checked against the SDK source and its examples, **not run** (no network to SimScale here). Install the SDK from GitHub (not on PyPI) |
 | `adjoint` | OpenFOAM adjoint (Part 2's ESI path, or DAFoam), per-vertex drag sensitivity → race-time gradient on the field | ~2 primal runs | ESI failed Part 3's wing test. Must pass `gate-adjoint` first |
 
-**SimScale:** good for every derivative-free method (`random`, `cma`, `bo`, `sail`, `neat`,
+**SimScale:** good for every derivative-free method (`cma`, `bo`, `sail`, `neat`,
 `spsa`). It has no adjoint. Its Incompressible LBM solver meshes itself, which suits organic
 shapes well.
 

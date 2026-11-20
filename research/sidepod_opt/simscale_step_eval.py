@@ -66,7 +66,11 @@ class SimScaleStepEvaluator:
         self.runs_per_key, self.speed, self.max_cost = runs_per_key, speed_mps, max_cost
         self.fineness, self.box_mm, self.iters = fineness, box_mm, iters
         self.fixed_project = project_id
-        self._clients, self._done, self._wheels = {}, {}, None
+        self._clients, self._wheels = {}, None
+        # finished results stay in the state file until the campaign has had them for a whole tick, so a
+        # process stopped mid-collect hands them over again on restart (the campaign skips ids it already has)
+        self._done = self.st.setdefault("done", {})
+        self._handed = set()
         self.keys = {fingerprint(k): k for k in keys_from_env()}
         for fp in self.keys:
             self.st["keys"].setdefault(fp, {"runs": 0, "project": None, "box": None, "retired": None})
@@ -156,6 +160,8 @@ class SimScaleStepEvaluator:
         self._save()
 
     def collect(self):
+        for cid in self._handed:
+            self._done.pop(cid, None)
         for cid in list(self.st["cases"]):
             c = self.st["cases"][cid]
             try:
@@ -167,8 +173,9 @@ class SimScaleStepEvaluator:
             except Exception as e:                                     # noqa: BLE001
                 self._on_error(cid, e)
             self._save()
-        out, self._done = self._done, {}
-        return out
+        self._handed = set(self._done)
+        self._save()
+        return dict(self._done)
 
     def _on_error(self, cid, e):
         c = self.st["cases"].get(cid)
@@ -306,7 +313,20 @@ class SimScaleStepEvaluator:
             r_api = s.SimulationRunsApi(api)
             run = r_api.get_simulation_run(P, c["sim_id"], c["run_id"])
             if run.status in ("FAILED", "CANCELED"):
-                return self._fail(cid, f"run {run.status}")
+                codes = []
+                try:
+                    codes = [e.code for e in (r_api.get_simulation_run_event_log(P, c["sim_id"], c["run_id"]).entries or [])
+                             if e.severity == "ERROR"]
+                except Exception:                                        # noqa: BLE001
+                    pass
+                c.setdefault("tries", []).append(f"{FACES[c['attempt']]}: run {run.status} at {run.progress} {codes}")
+                # divergence in the first few % of iterations is a bad mesh element (seen at iteration 1),
+                # not the design: mesh it again from another pod triangle count
+                early = (run.progress or 0.0) < 0.05 and "MSG_OF_CHECK_MESH_OR_NUMERICS" in codes
+                if run.status == "FAILED" and early and c["attempt"] + 1 < len(FACES):
+                    c.update(attempt=c["attempt"] + 1, phase="step")
+                    return
+                return self._fail(cid, f"run {run.status}: {c['tries']}")
             if run.status != "FINISHED":
                 c["progress"] = getattr(run, "progress", None)
                 return

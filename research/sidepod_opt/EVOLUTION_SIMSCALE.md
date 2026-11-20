@@ -189,7 +189,9 @@ python campaign.py report runs/simscale       # runs.md, convergence.png, best.p
 **Errors never blame a design unless the design is at fault.**
 - Network, quota and auth errors: the car waits and retries.
 - A bug in our code: the car waits, with `last_error` shown in `status`.
-- Only a geometry that can't be built, imported six times, meshed or solved counts as a failed design. CMA scores it as worse than its generation.
+- Import failure, mesh failure, or a run that diverges in its first few iterations (a bad mesh element: seen once, at iteration 1, charged 0 core-hours) all restart the car at the next of 10 pod triangle counts.
+- Only a geometry that can't be built, or fails all 10 counts, or diverges late in the run, counts as a failed design. CMA scores it as worse than its generation.
+- Finished results stay in `simscale_state.json` (`done`) until the campaign has stored them, so stopping the process mid-collect loses nothing.
 
 **State lives on disk,** so a run can die or be restarted at any point:
 
@@ -248,7 +250,7 @@ Each batch goes up as a release asset; results come back as workflow artifacts. 
 | Rules (cargo off, 27.175 mm ceiling, top/bottom milling, 3 mm walls, one piece), exact watertight export | tested |
 | Air volume STEP (exact CAD + triangle pod, seam 0.3 mm off the region), names surviving SimScale's import | tested on SimScale: 3 evolved designs imported first time, 2 meshed with boundary layers |
 | Simulation + mesh built from code, run on SimScale | tested: the team car meshed (5.7 M cells) and ran |
-| Campaign → SimScale (keys, retries, import re-tries) | smoke-tested on SimScale up to meshing |
+| Campaign → SimScale (keys, retries, import re-tries) | running: first generation solved on SimScale (runs take 4–6 h each) |
 | Force reading | see the status line at the top |
 | Actions re-check | dry-run tested; a real dispatch has not run yet |
 | Whole car (nose, rear pods) and the 3 layout variables | **not built**; only the sidepod region is designable |

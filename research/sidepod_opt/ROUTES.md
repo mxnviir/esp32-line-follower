@@ -162,6 +162,13 @@ external topology case was **not found** in their material (that is not proof it
   right as their solvers started. Files, installs and the gradient survived; swap had to be
   re-enabled. Lesson: in this cloud session, long jobs survive only while a session-tracked
   background task is running. Relaunched 17:57 with a tracked watcher; expected ~19:20 UTC.
+- **2026-11-20 18:15, local agent: 4-core codespace prepared, then stopped (owner's call; resume ~19:35).**
+  The account offers only 2- and 4-core machines (`standardLinux32gb`: 4 cores, 15 GB RAM, 32 GB disk
+  + 118 GB `/tmp`). Set up `sidepod-shape-loop-5p94vxwg4xpcvx79`: OpenFOAM v2412, DAFoam image
+  (containerd store, fits), Python stack (imports OK after two PyPI timeouts; runner now retries
+  with gentler downloads). Swap works only on `/tmp` (17 GB; it's re-created on restart, as `/tmp`
+  is wiped when the codespace stops). Main disk 4.4 GB free for CFD runs: watch it. Plan: one seed
+  (`original`) once the 3-pair check passes.
 
 ## Sources
 

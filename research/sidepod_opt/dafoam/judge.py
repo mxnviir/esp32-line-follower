@@ -12,6 +12,7 @@ Same three readings as gate.py judge:
 """
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -22,7 +23,7 @@ from scipy.spatial import cKDTree
 HERE = Path(__file__).resolve().parent
 SP = HERE.parent
 G = SP / "gate"
-R = SP / "gate_results"
+R = Path(os.environ.get("GATE_RESULTS", SP / "gate_results"))   # coarse test: gate_results_coarse
 
 
 def displacement_at(points, base_v, disp, k=4):

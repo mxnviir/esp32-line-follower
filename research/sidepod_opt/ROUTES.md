@@ -236,6 +236,20 @@ external topology case was **not found** in their material (that is not proof it
   opposite-signed, small `pod_rear_top` effect is predicted within 4 %. The DAFoam Krylov adjoint
   on the steady (first-order upwind U) coarse flow is trustworthy for small sidepod moves.
   `gate_results_coarse_up/pair_judge.json`. Next: `run_loop_here.sh cloud_original original` here.
+- **2026-11-20 19:55, the loop works at design scale: step 1 accepted, −3.8 % drag (steady model).**
+  Run `runs/cloud_original` (seed: the team's pod), this machine, 4 cores.
+  - **Iteration 0 (the seed):** fresh mesh, 449.24 mN whole car (steady model; the gate's 228.7 mN
+    half car was a mesh of the exact CAD, this is the re-surfaced body), converged, stderr 0.002 mN.
+    DAFoam primal 224.607 vs OpenFOAM 224.619 mN half car; adjoint 27 min.
+  - **Step 1 (1.5 mm, σ 4.5 mm):** on the morphed mesh (no fallback), **432.25 mN (−16.99 mN, −3.8 %)**.
+    First-order prediction −43.4 mN; measured / predicted = 0.39, nonlinear but the same direction.
+    83 % of the pod surface moved by > 0.1 mm.
+  - **Mass:** pod 67.5 → 68.0 cm³ voxels, +1.47 cm³ mesh; foam +0.24 g, the last 0.05 g of lead gone:
+    +0.19 g over the floor (≈ +1.4 ms) against ≈ −3.1 ms from drag. The multiplier aimed for zero
+    volume change: `step_field`'s volume estimate (occupancy ramp) under-reads the mesh's change.
+    The decision uses the exact mass, so it is still correct; the step is just less mass-efficient
+    than intended. To fix between runs, not mid-run.
+  - `morph_drift` can't read a fresh (binary) mesh; it works on morphed steps (ASCII).
 
 ## Sources
 

@@ -148,7 +148,7 @@ external topology case was **not found** in their material (that is not proof it
   from a set-up direction are buildable, so the search can't produce closed tunnels, by the rules
   of the process rather than any limit of the method. The open `channel` seed came out at 22.4 cm³
   (first version: the slot was oversized and cut the outer pod loose). Fixed: an 8 mm outboard groove (the 6.35 mm ball must fit; a 6 mm one was refilled), seed now 57.3 cm³ and buildable.
-- **2026-11-20 17:45, local agent takes over (owner's PC, Linux, `gh`).** Fixes before any launch:
+- **2026-11-20 17:33, local agent takes over (owner's PC, Linux, `gh`).** Fixes before any launch:
   the repo is now `mxnviir/stem-racing-paper`, so every codespace script cd'd into a folder that
   doesn't exist (`/workspaces/esp32-line-follower`); fixed. `shape_loop.py`: if DAFoam fails after
   an accepted step, the next start re-runs the adjoint on that design (`grad_ready`) instead of

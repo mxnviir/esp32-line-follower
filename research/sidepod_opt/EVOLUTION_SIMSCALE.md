@@ -153,7 +153,7 @@ Faces are named in the STEP (inlet, outlet, symmetry, side, top, ground, wheelF,
 | Whole half body as 20k triangles | imports, but meshing fails ("element size too close to the CAD tolerance"): the team's CAD has 263 faces under 0.1 mm², whose triangles are 0.04 mm wide. Raising small-feature suppression to 0.2 mm meshes, but only with boundary layers off. |
 | **Seam moved 0.3 mm off the region, no overlap** | **3 of 3 designs imported first time; both tested meshed with boundary layers.** Any overlap (0.02–0.1 mm) breaks the OpenCASCADE cut on some cars. |
 
-If SimScale still refuses one, the evaluator rebuilds the pod with another triangle count (4500 → 5200 → 3900 → 6000 → 4200 → 6800) and tries again; mesh failures get the same treatment. The reasons are logged in `tries`.
+If SimScale still refuses one, the evaluator rebuilds the pod with another triangle count (4500 → 5200 → 3900 → 6000 → 4200 → 6800 → 4800 → 5600 → 3600 → 7500) and tries again; mesh failures get the same treatment. The reasons are logged in `tries`.
 
 **Per car, the evaluator (`simscale_step_eval.py`) walks:**
 
@@ -236,7 +236,7 @@ Each batch goes up as a release asset; results come back as workflow artifacts. 
 | `status` shows `capacity: 0` | every key has used its runs: add keys (section 6) |
 | a key `retired` with a quota/401 message | that account is out of credit or the key was reset; its cars move to the next key |
 | a car stuck with `last_error` | read the message: a proxy/network error clears itself; anything else is a bug to fix (the car is not blamed) |
-| "import refused 6 times" | a pod SimScale won't take at any triangle count (rare); the design counts as failed. `tries` has SimScale's reasons |
+| "import refused 10 times" | a pod SimScale won't take at any triangle count (rare); the design counts as failed. `tries` has SimScale's reasons |
 | "named faces missing after import" | the STEP lost its face names (check `simscale_step_domain.write_step`) |
 | "too expensive" in `designs.jsonl` | the estimate exceeded `max_cost` (core-hours) |
 | Everything illegal | read `check` in `designs.jsonl`: thin foam or pieces usually means the step size is too large (lower CMA `"sigma"`) |

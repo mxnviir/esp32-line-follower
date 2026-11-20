@@ -34,7 +34,7 @@ from pathlib import Path
 import numpy as np
 
 HERE = Path(__file__).resolve().parent
-FACES = (4500, 5200, 3900, 6000, 4200, 6800)       # pod triangle counts tried in turn
+FACES = (4500, 5200, 3900, 6000, 4200, 6800, 4800, 5600, 3600, 7500)   # pod triangle counts tried in turn
 PROJECT_NAME = "sidepod evolution"
 QUOTA_WORDS = ("quota", "credit", "insufficient", "limit exceeded", "core hour", "cpu hour", "not enough", "exceed",
                "subscription", "plan does not", "payment")

@@ -117,6 +117,8 @@ def morph_drift(run: str, target_stl: Path) -> dict:
         _, dist, _ = trimesh.proximity.closest_point(m, pts)
         return {"drift_mean_mm": float(dist.mean() * 1e3), "drift_p99_mm": float(np.quantile(dist, 0.99) * 1e3),
                 "drift_max_mm": float(dist.max() * 1e3)}
+    except UnicodeDecodeError:                                     # a fresh (binary) mesh: not measured
+        return {}
     except Exception as e:                                         # a diagnostic only
         return {"drift_error": repr(e)[:200]}
 
@@ -394,6 +396,32 @@ def cmd_run(a):
                                   st["run_current"], cfg["np"])
             except Exception as e:                                  # a failed solve is a rejected step
                 cfd, rdir = {"error": repr(e)[:300]}, None
+            if cfd.get("morph_fallback") and st["T_current"] is not None and not rec.get("rebased"):
+                # the lineage's mesh can no longer be reshaped onto this design: RE-BASE. Solve the
+                # current design on a fresh mesh (its gradient stays valid: same design), make that
+                # the reference, and morph the candidate from it, so both numbers share a mesh.
+                if rdir:
+                    shutil.rmtree(rdir, ignore_errors=True)
+                try:
+                    cb, rb = solve(run / "best_car", cfg["iters_cold"], None, cfg["np"])
+                except Exception as e:
+                    cb, rb = {"error": repr(e)[:300]}, None
+                if cb.get("D20_N") is not None and cb.get("converged"):
+                    Tb, _ = rm(cb["D20_N"], cb["L20_N"], st["mass_current"])
+                    rec.update(rebased=True, rebase_D20_N=cb["D20_N"], rebase_from_D20_N=st["D_current"])
+                    if st["run_current"] and Path(st["run_current"]).exists():
+                        shutil.rmtree(st["run_current"], ignore_errors=True)
+                    st.update(T_current=Tb, D_current=cb["D20_N"], L_current=cb["L20_N"], run_current=rb)
+                    save()
+                    try:
+                        cfd, rdir = solve(folder, cfg["iters_warm"], rb, cfg["np"])
+                    except Exception as e:
+                        cfd, rdir = {"error": repr(e)[:300]}, None
+                else:
+                    rec.update(rebase_error=cb.get("error") or "re-base solve did not converge")
+                    if rb:
+                        shutil.rmtree(rb, ignore_errors=True)
+                    cfd, rdir = dict(cfd, morph_fallback=True), None
             (d / "cfd.json").write_text(json.dumps(cfd, indent=1, default=float))
             rec.update(cfd)
             T = None

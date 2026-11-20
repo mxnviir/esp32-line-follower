@@ -276,6 +276,11 @@ external topology case was **not found** in their material (that is not proof it
   of curvature, so the shrinking steps are working as intended. Watch: repeated morph fallbacks as
   the shape drifts from the seed's mesh. If they recur, re-base the lineage (re-solve the current
   design on a fresh mesh and continue from it).
+- **2026-11-20 21:00, re-basing added** (takes effect from iteration 4; each iteration is a fresh
+  process). When the lineage's mesh can't be morphed onto a candidate (`MORPH_FALLBACK`): solve the
+  current design on a fresh mesh, make it the reference (its gradient stays valid, same design),
+  and morph the candidate from it, so both numbers share a mesh. Before this, every fallback was
+  a rejection with the step halved, so repeated fallbacks would have shrunk the steps to nothing.
 
 ## Sources
 

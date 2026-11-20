@@ -11,7 +11,7 @@
 set -x
 exec >> /workspaces/loop_job.log 2>&1
 SEEDS=${SEEDS:-"original lean block"}; NP=${NP:-4}; ITERS=${ITERS:-12}; HOURS=${HOURS:-10}
-ROOT=/workspaces/esp32-line-follower
+ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 BRANCH=$(cd $ROOT && git rev-parse --abbrev-ref HEAD)
 echo "START_SETUP $(date -u)"
 

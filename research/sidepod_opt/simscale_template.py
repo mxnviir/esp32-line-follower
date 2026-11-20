@@ -59,7 +59,7 @@ def wheel_centres_m():
     zb = []
     for sol in ("wheel_fl", "wheel_rl"):
         b = Bnd_Box(); BRepBndLib.Add_s(SD.to_car_frame(solids[sol], sp.x_nose_mm), b, False); zb.append(b.CornerMin().Z())
-    drop_mm = min(zb) + SD.SINK_MM
+    drop_mm = 0.0                                                    # wheels stay where the STEP has them
     for name, sol in (("wheelF", "wheel_fl"), ("wheelR", "wheel_rl")):
         b = Bnd_Box(); BRepBndLib.Add_s(SD.to_car_frame(solids[sol], sp.x_nose_mm), b)
         lo, hi = b.CornerMin(), b.CornerMax()

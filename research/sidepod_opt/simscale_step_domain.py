@@ -25,9 +25,9 @@ import trimesh
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
-SINK_MM = 0.15               # the road sits this far above the wheels' lowest point: wheels pressed 0.15 mm in
-GROUND_MM = 0.0              # faceted (Part 4 export) cars: wheels already sunk 0.3 mm below z = 0
-DOMAIN_MM = ((-771.0, 0.0, GROUND_MM), (2314.0, 192.0, 245.0))   # Part 2's half tunnel for this car
+ROAD_GAP_MM = 0.15           # the team's choice: the road 0.15 mm BELOW the wheels' lowest point (no contact)
+SINK_MM = -ROAD_GAP_MM       # kept for callers: how far the wheels go into the road (negative = a gap)
+DOMAIN_MM = ((-771.0, 0.0, 0.0), (2314.0, 192.0, 245.0))   # Part 2's half tunnel for this car
 
 
 def stl_solid(mesh_mm):
@@ -71,7 +71,9 @@ def build(folder: Path, out: Path, domain=DOMAIN_MM):
         m = trimesh.load(folder / f"{w}.stl"); m.apply_scale(1e3); wheels[w] = m
     car_s = stl_solid(body)
     wheel_s = {w: stl_solid(m) for w, m in wheels.items()}
-    (x0, y0, z0), (x1, y1, z1) = domain
+    (x0, y0, _), (x1, y1, z1) = domain
+    z0 = min(float(m.bounds[0, 2]) for m in wheels.values()) - ROAD_GAP_MM   # e.g. wheels at -0.3 -> road at -0.45
+    domain = ((x0, y0, z0), (x1, y1, z1))
     box = BRepPrimAPI_MakeBox(gp_Pnt(x0, y0, z0), gp_Pnt(x1, y1, z1)).Shape()
     cut = BRepAlgoAPI_Cut()
     from OCP.OCP.collections import List_TopoDS_Shape
@@ -195,15 +197,10 @@ def build_exact(out: Path, spec=None, domain=DOMAIN_MM):
     zmin = []
     for w in wheel_s.values():
         b = Bnd_Box(); BRepBndLib.Add_s(w, b, False); zmin.append(b.CornerMin().Z())
-    # As Parts 2 and 4: the road is the track (z = 0), the body keeps its real height (1.5 mm gap), and
-    # only the wheels are lowered so they press SINK_MM into the road (a contact patch, not a sliver gap)
-    from OCP.BRepBuilderAPI import BRepBuilderAPI_Transform
-    from OCP.gp import gp_Trsf, gp_Vec
-    drop = min(zmin) + SINK_MM
-    tr = gp_Trsf(); tr.SetTranslation(gp_Vec(0, 0, -drop))
-    wheel_s = {k: BRepBuilderAPI_Transform(w, tr, True).Shape() for k, w in wheel_s.items()}
+    # The team's choice: car and wheels exactly as in the STEP; the road ROAD_GAP_MM under the wheels' lowest point
+    drop = 0.0
     (x0, y0, _), (x1, y1, z1) = domain
-    z0 = 0.0
+    z0 = min(zmin) - ROAD_GAP_MM
     domain = ((x0, y0, z0), (x1, y1, z1))
     box = BRepPrimAPI_MakeBox(gp_Pnt(x0, y0, z0), gp_Pnt(x1, y1, z1)).Shape()
     cut = BRepAlgoAPI_Cut()
@@ -227,7 +224,7 @@ def build_exact(out: Path, spec=None, domain=DOMAIN_MM):
     while ex.More():
         nf += 1; ex.Next()
     return {"step": str(out), "removed_mm3": removed, "expected_mm3": expect, "removed_share": removed / expect,
-            "faces_total": nf, "named": counts, "ground_mm": z0, "wheels_lowered_mm": drop, "wheel_sink_mm": SINK_MM, "secs": round(time.time() - t0)}
+            "faces_total": nf, "named": counts, "ground_mm": z0, "wheel_bottom_mm": min(zmin), "road_gap_mm": ROAD_GAP_MM, "secs": round(time.time() - t0)}
 
 
 def main():

@@ -1,14 +1,10 @@
-# Evolution on SimScale
+# SimScale template reference
 
-`campaign.py` runs CMA-ES and SAIL. Every car is meshed and solved on SimScale through its API (`SimScaleEvaluator` in `evaluators.py`). The four best cars are then re-timed in our own OpenFOAM pipeline on GitHub Actions.
-
-**Status:**
-- **Tested:** the state machine, restart-safety, face remapping, force read, cost guard and a full campaign loop, all against a mocked SDK (`test_simscale.py`). The SDK call names were checked against the SDK source.
-- **Not yet run against SimScale.** The first real step is two cars (below).
+**The full step-by-step guide is `EVOLUTION_SIMSCALE.md`.** This page only keeps the template simulation's settings, for reference.
 
 ## 1. What you do once
 
-1. **API key.** In SimScale, open your account settings and find "API keys". If there is no such page, your plan has no API access, and this route cannot run. Don't paste the key in chat: Claude asks for it through a secure form, and it is stored as a secret of the cloud environment.
+1. **API key.** In SimScale, open your account settings and find "API keys". If there is no such page, your plan has no API access, and this route cannot run. Set it as `SIMSCALE_API_KEY` in the environment; never commit it.
 2. **The original car's files.** Run this from `research/sidepod_opt/`:
    ```bash
    python -c "from pathlib import Path; from geometry import Car; c = Car(); c.export_car_folder(c.body_mesh, Path('simscale_template'), 'original')"
@@ -33,7 +29,7 @@
 
 4. **One mesh operation** on that simulation. Use automatic or standard meshing with refinement on the car and wheels and a refined region under the car (the gap is 1.5–2 mm). Every design copies these mesh settings.
 5. **Run it once** and check the drag. Our OpenFOAM gives 0.183 N for the half car. Agreement within 10–15 % is normal across solvers; only SimScale-to-SimScale differences steer the search.
-6. **Send Claude the run's estimated cost** (core hours or credits) and your total budget. With the key in place, Claude finds the project, simulation and mesh-operation IDs through the API.
+6. **IDs:** `python simscale_tool.py ids` lists the project, simulation and mesh-operation IDs.
 
 ## 2. What runs
 

@@ -85,7 +85,7 @@ class Campaign:
                 self._ev[key] = EV.SimScaleEvaluator(spec["project_id"], spec["template_sim_id"], spec["mesh_template_id"],
                                                      self.root / "simscale_inflight.json",
                                                      speed_mps=spec.get("speed_mps", 20.0), symmetric_half=spec.get("half", True),
-                                                     max_cost=spec.get("max_cost"))
+                                                     max_cost=spec.get("max_cost"), bodies=spec.get("bodies"))
             elif k == "adjoint":
                 self._ev[key] = EV.AdjointEvaluator(self.car, self.rm, spec.get("backend", "esi"), spec.get("res", "medium"))
             else:

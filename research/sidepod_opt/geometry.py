@@ -65,6 +65,10 @@ class CarSpec:
     spine_z: float = 17.0
     halo_x0: float = 115.0               # T4.4.2: nothing above halo_zmin from here forward
     halo_zmin: float = 27.0
+    # design rules (switches; defaults keep the original behaviour)
+    cargo: bool = True                   # False: no virtual cargo (not forced, not checked)
+    ceiling_mm: float | None = None      # nothing in the region above this height (e.g. 27.0: the team's sidepod top)
+    mill_dirs: str = "zy"                # "zy": top, bottom, left, right set-ups; "z": top and bottom only
     cargo_x: tuple = (76.0, 136.0)       # T4.2 wedge, wide end (55 mm) forward
     cargo_z: tuple = (17.0, 27.0)        # ASSUMED: confirm with the team
     # mass (ASSUMED where the STEP is silent; see README)
@@ -113,8 +117,9 @@ class Car:
         X, Y, Z = np.meshgrid(self.xs, self.ys, self.zs, indexing="ij")
         self.X, self.Y, self.Z = X, Y, Z
         AY = np.abs(Y)
+        ztop = s.region_z[1] if s.ceiling_mm is None else min(s.region_z[1], s.ceiling_mm)
         box = ((X >= s.region_x[0]) & (X <= s.region_x[1]) & (AY <= s.region_ymax)
-               & (Z - h / 2 >= s.region_z[0]) & (Z + h / 2 <= s.region_z[1]))
+               & (Z - h / 2 >= s.region_z[0]) & (Z + h / 2 <= ztop))
         dy = np.clip(AY - s.front_inner_y, 0, None)
         t792 = ((AY >= s.front_inner_y) & (X <= s.x_front_axle)
                 & (X >= s.x_front_axle - s.r_wheel - (15.0 + dy / np.tan(np.radians(60)))))
@@ -126,13 +131,18 @@ class Car:
         hw = 5.0 + (X - s.cargo_x[0]) / (s.cargo_x[1] - s.cargo_x[0]) * 22.5
         self.cargo = ((X >= s.cargo_x[0]) & (X <= s.cargo_x[1]) & (AY <= hw)
                       & (Z >= s.cargo_z[0]) & (Z <= s.cargo_z[1]))
+        if not s.cargo:
+            self.cargo = np.zeros_like(self.cargo)
         self.forced_air = (t792 | t793 | halo) & box & ~self.spine_zone
         self.region = box & ~self.forced_air & ~self.spine_zone
         self.keep = self.body0 & ~self.region
         din = ndimage.distance_transform_edt(self.body0) * h
         dout = ndimage.distance_transform_edt(~self.body0) * h
         self.sdf_original = np.where(self.body0, din, -dout).astype(np.float32)
-        self.sdf_lean = (-(ndimage.distance_transform_edt(~self.cargo) * h)).astype(np.float32)
+        # "lean" = cargo only; with no cargo, no pod at all: minus the distance from the kept body,
+        # on the same scale as the original's distance field (a large constant would swamp blends)
+        self.sdf_lean = (-(ndimage.distance_transform_edt(~(self.cargo if self.cargo.any() else self.keep)) * h)
+                         ).astype(np.float32)
         lo = np.array([s.region_x[0], 0.0, s.region_z[0]]); hi = np.array([s.region_x[1], s.region_ymax, s.region_z[1]])
         self.norm = np.stack([(X - (lo[0] + hi[0]) / 2) / ((hi[0] - lo[0]) / 2), AY / hi[1],
                               (Z - (lo[2] + hi[2]) / 2) / ((hi[2] - lo[2]) / 2)], -1).astype(np.float32)
@@ -196,6 +206,8 @@ class Car:
             poly = [[s.x_rear_axle, yi], [s.x_rear_axle, yo], [xr + 60.0, yo], [xr, yi]]
             cut.append(prism_xy(poly, -1, 60))
         cut.append(box(s.halo_x0 + e, big, -big, big, s.halo_zmin + e, big))
+        if s.ceiling_mm is not None:                                # exact: no seam allowance above the ceiling
+            cut.append(box(-big, big, -big, big, s.ceiling_mm, big))
         cut.append(box(-big, big, -s.spine_y + e, s.spine_y - e, s.spine_z + e, big))
         for c in cut:
             R = R - c
@@ -208,6 +220,16 @@ class Car:
         return self.keep | (f > 0) & self.region | self.cargo
 
     def mill(self, B: np.ndarray) -> tuple[np.ndarray, dict]:
+        """Part 1's machining rule with this spec's set-ups (mill_dirs)."""
+        dirs = {"zy": (("z", 2, True), ("z", 2, False), ("y", 1, True), ("y", 1, False)),
+                "z": (("z", 2, True), ("z", 2, False))}[self.s.mill_dirs]
+        saved, MC.DIRECTIONS = MC.DIRECTIONS, dirs
+        try:
+            return self._mill(B)
+        finally:
+            MC.DIRECTIONS = saved
+
+    def _mill(self, B: np.ndarray) -> tuple[np.ndarray, dict]:
         rep = {"uncut_foam_mm3": 0.0}
         r = MC.TOOL_R_MM / self.h
         for _ in range(3):

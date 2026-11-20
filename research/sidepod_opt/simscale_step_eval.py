@@ -3,8 +3,9 @@
 Every design walks:   step -> import -> mesh -> run -> done
 as a state machine kept in a JSON file, so the campaign never blocks (cron `campaign.py tick`).
 
-  step    the air volume STEP (simscale_step_domain.build_faceted: the half body as ~20k triangles,
-          exact wheels, road 0.15 mm under the wheels) is written and uploaded, the import started
+  step    the air volume STEP (simscale_step_domain.build_design: the team's exact CAD outside the
+          sidepod region, the designed pod as ~4500 triangles, exact wheels, road 0.15 mm under the
+          wheels) is written and uploaded, the import started
   import  when it finishes: the faces are found by name, a simulation and mesh operation are made
           (simscale_template.create_case) and meshing starts. If SimScale refuses the import (it
           does for some files, without a reason), the pod is rebuilt with another triangle count
@@ -33,7 +34,7 @@ from pathlib import Path
 import numpy as np
 
 HERE = Path(__file__).resolve().parent
-FACES = (20000, 16000, 24000, 12000, 18000, 22000)   # half-body triangle counts tried in turn
+FACES = (4500, 5200, 3900, 6000, 4200, 6800)       # pod triangle counts tried in turn
 PROJECT_NAME = "sidepod evolution"
 QUOTA_WORDS = ("quota", "credit", "insufficient", "limit exceeded", "core hour", "cpu hour", "not enough", "exceed",
                "subscription", "plan does not", "payment")
@@ -203,7 +204,7 @@ class SimScaleStepEvaluator:
         body = trimesh.load(folder / "body_mm.stl")                    # STEP frame, mm (Car.export_car_folder)
         out = folder / f"domain_{faces}.step"
         try:
-            rep = SD.build_faceted(self.car.s, body, out, faces=faces)
+            rep = SD.build_design(self.car, body, out, faces=faces)
         except GeometryError:
             raise
         except Exception as e:                                          # noqa: BLE001  (OCC/sewing on this pod)

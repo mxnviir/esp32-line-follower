@@ -229,7 +229,7 @@ def build_exact(out: Path, spec=None, domain=DOMAIN_MM):
 
 # ---------------------------------------------------------------------- designed cars
 SEAM_MM = 0.3                # exact-CAD / triangle-pod seam this far outside the design region (seam_region)
-SEAM_OVERLAP_MM = 0.05       # the pod reaches this far past the seam into the kept CAD
+SEAM_OVERLAP_MM = 0.0        # pod and kept CAD meet exactly on the seam planes (any overlap broke the OCC cut on some cars)
 POD_FACES = 4500             # triangles kept on the designed pod (SimScale imports a few thousand faces; 32k failed)
 
 
@@ -276,7 +276,7 @@ def seam_region(car, grow_mm):
 
 def pod_mesh(car, body_mesh, faces=POD_FACES, grow_mm=2.0):
     """The designed body inside the seam region (+y side, STEP frame, mm), reduced to `faces`
-    well-shaped triangles, overlapping the kept CAD by SEAM_OVERLAP_MM. Outside the design region the
+    well-shaped triangles, meeting the kept CAD on the seam planes. Outside the design region the
     body IS the team's CAD, so the band between the region and the seam is the original shape."""
     import manifold3d as mf
     import pymeshlab as ml

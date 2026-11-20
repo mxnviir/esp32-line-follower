@@ -224,6 +224,18 @@ external topology case was **not found** in their material (that is not proof it
       from the seed, and |change| ≥ 3σ (≈ 1.5 mN half car; σ from both runs' stderr).
     - **Fail** (opposite sign at ≥ 3σ): stop the loop. The steady model is misranking.
     - **Inconclusive** (< 3σ): continue, and repeat after more accepted steps.
+- **2026-11-20 19:13, GRADIENT CHECK PASSED (3 of 3 pairs, steady model, coarse, ±1 mm).**
+
+  | site | measured (D₊ − D₋)/2 | adjoint | predicted / measured |
+  |---|---|---|---|
+  | `pod_rear` | −1.500 mN | −1.635 mN | 1.09 |
+  | `pod_front_low` | −0.690 mN | −0.458 mN | 0.66 |
+  | `pod_rear_top` | **+0.251 mN** | **+0.242 mN** | 0.97 |
+
+  Signs 3/3 (each ≥ 100σ; noise 0.0025 mN), every ratio within 0.5–2, Pearson r = 0.98. The
+  opposite-signed, small `pod_rear_top` effect is predicted within 4 %. The DAFoam Krylov adjoint
+  on the steady (first-order upwind U) coarse flow is trustworthy for small sidepod moves.
+  `gate_results_coarse_up/pair_judge.json`. Next: `run_loop_here.sh cloud_original original` here.
 
 ## Sources
 

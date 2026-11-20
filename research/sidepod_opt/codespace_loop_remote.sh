@@ -20,12 +20,13 @@ sudo apt-get update -q && sudo apt-get install -y -q libopengl0 libglu1-mesa lib
 [ -d /usr/lib/openfoam/openfoam2412 ] || { curl -s https://dl.openfoam.com/add-debian-repo.sh | sudo bash; sudo apt-get install -y -q openfoam2412-default; }
 
 # ---- Python (pinned as in codespace_gate.sh)
-if [ ! -x /workspaces/py/bin/python ]; then
-  python3 -m pip install --break-system-packages -q uv && uv venv -p 3.11 /workspaces/py
-  . /workspaces/py/bin/activate
-  uv pip install -q numpy==2.4.6 scipy==1.17.1 pandas trimesh==5.2.0 scikit-image shapely rtree==1.4.1 mapbox-earcut \
-    manifold3d==3.5.4 fast_simplification==0.2.0 jax jaxlib matplotlib pymeshlab==2025.7.post1 numba cadquery-ocp
-fi
+export UV_CACHE_DIR=/tmp/uv-cache          # the cache on the big disk, not the 32 GB one
+[ -x /workspaces/py/bin/python ] || { python3 -m pip install --break-system-packages -q uv && uv venv -p 3.11 /workspaces/py; }
+for i in 1 2 3 4 5; do        # PyPI sometimes times out: retry until the stack imports
+  /workspaces/py/bin/python -c "import numpy, scipy, trimesh, skimage, manifold3d, jax, numba, OCP, pymeshlab" 2>/dev/null && break
+  VIRTUAL_ENV=/workspaces/py uv pip install -q numpy==2.4.6 scipy==1.17.1 pandas trimesh==5.2.0 scikit-image shapely rtree==1.4.1 mapbox-earcut \
+    manifold3d==3.5.4 fast_simplification==0.2.0 jax jaxlib matplotlib pymeshlab==2025.7.post1 numba cadquery-ocp || sleep $((20 * i))
+done
 export PATH=/workspaces/py/bin:$PATH
 
 # ---- disk: on a 4-core codespace (32 GB disk) OpenFOAM + venv + the DAFoam image (containerd store,

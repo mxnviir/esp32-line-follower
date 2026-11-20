@@ -54,6 +54,20 @@ class Param:
         return cols.project(zb, zt)
 
 
+def best_legal(case, top=40):
+    """The best-scored design that passes every rule when built ONCE from its own variables
+    (projection is not idempotent, so a design is always rebuilt from x, never re-projected)."""
+    import json as _j
+    case = Path(case)
+    cols = M.Columns(case); P = Param(cols)
+    rows = sorted((_j.loads(l) for l in open(case / "cma_log.jsonl")), key=lambda r: r["J"])
+    for r in rows[:top]:
+        x = np.array(r["x"]); zb, zt, B, rep = P.design(x)
+        if cols.car.check(B)["ok"] and (B & cols.reg & ~cols.lean).any():
+            return x, r, (zb, zt, B, rep), cols, P
+    return None
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("case")

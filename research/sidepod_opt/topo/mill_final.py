@@ -36,9 +36,8 @@ def team_surfaces(cols):
     return zb, zt
 
 
-def body_fitted(cols, zb, zt, res, tag):
+def body_fitted(cols, B, res, tag):
     import gate
-    zb, zt, B, rep = cols.project(zb, zt)
     car = cols.car
     chk = car.check(B)
     out = HERE / f"final_{tag}_{res}"
@@ -56,11 +55,11 @@ def main():
     a = ap.parse_args()
     steps = set(a.steps.split(","))
     res = json.loads(OUT.read_text()) if OUT.exists() else {}
-    best = np.load(HERE / "mill_coarse" / "cma_best.npz")
-    res["best_coarse_porous_J"] = float(best["J"])
-    cols_c = M.Columns(HERE / "mill_coarse")
+    import mill_cma as C
+    x, row, (bzb_c, bzt_c, Bc, _), cols_c, Pc = C.best_legal(HERE / "mill_coarse")   # best that passes every rule
+    res["best_coarse_porous_J"] = row["J"]; res["best_gen"] = row["gen"]; res["best_x"] = list(map(float, x))
     if "1" in steps:
-        res["coarse_bodyfitted_best"] = body_fitted(cols_c, best["zb"], best["zt"], "coarse", "best")
+        res["coarse_bodyfitted_best"] = body_fitted(cols_c, Bc, "coarse", "best")
         res["coarse_bodyfitted_refs"] = {"team_D20_N": json.loads((SP / "gate_results_coarse/base.json").read_text())["full_D20_N"],
                                          "no_sidepod_D20_N": 2 * json.loads((HERE / "lean_bodyfitted_coarse.json").read_text())["D20_half_N"]}
         save(res); print(json.dumps(res["coarse_bodyfitted_best"]), flush=True)
@@ -69,18 +68,18 @@ def main():
         cols = M.Columns(case)
         out = {}
         tzb, tzt = team_surfaces(cols)
-        tzb, tzt, _, _ = cols.project(tzb, tzt)
+        tzb, tzt, _, _ = cols.project(tzb, tzt)          # the team's pod, under the same rules
         J, *_ , secs = M.one_cycle(case, cols, tzb, tzt, 1500, 1, warm=True)       # team first: also the start flow
         out["team"] = {"J": J, "secs": round(secs)}
         save({**res, "1M_porous": out}); print("1M team", out["team"], flush=True)
-        bzb, bzt, _, _ = cols.project(best["zb"], best["zt"])
+        bzb, bzt, Bb, _ = C.Param(cols).design(x)                                  # same x, built once on this mesh's columns
         J, *_, secs = M.one_cycle(case, cols, bzb, bzt, 1000, 1, warm=False)
         out["best"] = {"J": J, "secs": round(secs)}
         out["best_minus_team_pct"] = 100 * (out["best"]["J"] - out["team"]["J"]) / out["team"]["J"]
         res["1M_porous"] = out
         save(res); print("1M best", out["best"], flush=True)
     if "3" in steps:
-        res["medium_bodyfitted_best"] = body_fitted(cols_c, best["zb"], best["zt"], "medium", "best")
+        res["medium_bodyfitted_best"] = body_fitted(cols_c, Bc, "medium", "best")
         res["medium_bodyfitted_refs"] = {"team_D20_N": 2 * json.loads((SP / "gate_results/base.json").read_text())["D20_half_N"]}
         save(res); print(json.dumps(res["medium_bodyfitted_best"]), flush=True)
     print("FINAL_DONE", flush=True)

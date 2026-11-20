@@ -25,10 +25,10 @@ def main():
     ap.add_argument("--title", default="optimiser")
     a = ap.parse_args()
     case = Path(a.case)
-    cols = M.Columns(case)
+    import mill_cma as C
+    x, r, (zb, zt, B, rep), cols, P = C.best_legal(case)          # built once from its own variables
     car = cols.car
-    d = np.load(case / a.npz)
-    zb, zt, B, rep = cols.project(d["zb"], d["zt"])
+    print("design: J", r["J"], "gen", r["gen"])
     pod = B & cols.reg & ~car.cargo
     team = car.body0 & car.region & ~car.cargo
     lean = cols.lean & ~car.cargo

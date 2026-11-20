@@ -28,17 +28,8 @@ if [ ! -x /workspaces/py/bin/python ]; then
 fi
 export PATH=/workspaces/py/bin:$PATH
 
-# ---- Docker images on the big /tmp disk: a 4-core codespace's 32 GB disk has ~11 GB free, the DAFoam
-#      image is 11 GB. Restart dockerd with the same arguments and data-root /tmp/docker.
-if [ "$(df --output=avail -BG /var/lib/docker | tail -1 | tr -dc 0-9)" -lt 25 ] && ! docker info 2>/dev/null | grep -q "Root Dir: /tmp/docker"; then
-  DCMD=$(ps -o args= -C dockerd | head -1)
-  echo '{"data-root": "/tmp/docker"}' | sudo tee /etc/docker/daemon.json
-  sudo pkill -x dockerd; for i in $(seq 30); do pgrep -x dockerd >/dev/null || break; sleep 1; done
-  sudo sh -c "nohup $DCMD > /tmp/dockerd.log 2>&1 &"
-  for i in $(seq 60); do docker info >/dev/null 2>&1 && break; sleep 1; done
-fi
-docker info 2>/dev/null | grep "Root Dir"
-
+# ---- disk: on a 4-core codespace (32 GB disk) OpenFOAM + venv + the DAFoam image (containerd store,
+#      /var/lib/containerd) leave ~6.6 GB free for CFD runs; swap goes on the big /tmp disk below.
 # ---- DAFoam image (Docker Hub sometimes answers 429: retry)
 for i in 1 2 3 4 5 6; do docker image inspect dafoam/opt-packages:v5.1.1 >/dev/null 2>&1 && break
   docker pull -q dafoam/opt-packages:v5.1.1 && break; sleep $((30 * i)); done
@@ -48,7 +39,7 @@ n=$(echo $SEEDS | wc -w); need=$((24 * n)); have=$(free -g | awk '/Mem/{print $2
 if [ "$have" -lt "$need" ] && ! swapon --show | grep -q swapfile; then
   sudo fallocate -l $((need - have + 8))G /tmp/swapfile && sudo chmod 600 /tmp/swapfile && sudo mkswap /tmp/swapfile && sudo swapon /tmp/swapfile   # /tmp: the big disk
 fi
-free -g; swapon --show; nproc; df -h / /tmp /workspaces
+free -g; swapon --show; nproc; docker image ls; df -h / /tmp /workspaces
 [ -n "$SETUP_ONLY" ] && { echo "SETUP_DONE $(date -u)"; exit 0; }
 
 source /usr/lib/openfoam/openfoam2412/etc/bashrc

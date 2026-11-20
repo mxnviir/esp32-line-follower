@@ -43,6 +43,11 @@ def main():
         (out / "system" / f).unlink(missing_ok=True)
     (out / "system" / "controlDict").write_text(CONTROL.replace("@ITERS@", str(a.iters)))
     fs = (out / "system" / "fvSchemes").read_text()
+    # DAFoam's adjoint preconditioner needs its own convection scheme (as in its tutorials); the primal
+    # never uses it
+    if "div(pc)" not in fs:
+        fs = fs.replace("div(phi,U)", "div(pc)         bounded Gauss upwind;\n    div(phi,U)", 1)
+        (out / "system" / "fvSchemes").write_text(fs)
     print(f"case {out} from {src}/{t}; schemes kept:\n" + "\n".join(l for l in fs.splitlines() if re.search(r"Gauss|limited|default", l)))
 
 

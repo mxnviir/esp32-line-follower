@@ -1,6 +1,10 @@
 # Adjoint accuracy gate: result (2026-11-20, finished 03:51 UTC)
 
-**Verdict: the ESI adjoint does not predict drag changes on this car. Do not take adjoint steps.**
+**Verdict (corrected later on 2026-11-20): the ESI adjoint failed on two meshes that were NOT the bumps' mesh, and is untested on the bumps' own mesh.**
+
+- Its gradient must not be used as it stands.
+- Whether ESI itself is wrong for this car remains open; see the correction under "Checks".
+- The measured responses below stand on their own, whatever any adjoint says.
 
 Half-car drag, mN. Noise: per-run stderr about 0.2 mN. The null bump (0.02 mm) measured -0.05 mN.
 
@@ -24,10 +28,10 @@ There are three, not 8 rows: +/- twins and the 0.75/1.5 mm amplitudes share one 
 - **Objective patches** = `(car wheelF wheelR)`. That is the same set the `forces` function object (D20) integrates.
 - **Adjoint converged:** Ua initial residual 2.3e-6, pa 1.0e-5 at the end.
 - **The two adjoints agree with each other** (r = 0.82 per vertex): repeatable, but wrong.
-- **Correction (found while setting up DAFoam):** the "matched" adjoint was matched in wall layers and primal length only. Its mesh had **375,068 cells**; state A's mesh, the one the bumps were measured on, has **519,620** (`checkMesh`). ESI's adjoint path meshes the car itself and leaves out part of Part 2's refinement. Neither ESI adjoint solved the flow the bumps were measured in. That supports, but does not prove, the verdict below. The DAFoam test runs on state A's own mesh and flow.
+- **Correction (found while setting up DAFoam):** the "matched" adjoint was matched in wall layers and primal length only. Its mesh had **375,068 cells**; state A's mesh, the one the bumps were measured on, has **519,620** (`checkMesh`). ESI's adjoint path meshes the car itself and leaves out part of Part 2's refinement. Neither ESI adjoint solved the flow the bumps were measured in. This **weakens** the earlier verdict: it shows a setup mismatch, not that ESI is wrong. The DAFoam test runs on state A's own mesh and flow. An ESI adjoint on state A's own mesh is the one cheap gradient test not yet run.
 - **Remaining mismatch (open):** the adjoint solver's own primal gives D20 = 187.5 mN against the bumps' state A of 182.9 mN (+2.5 %).
-  - The convection and gradient schemes are the same. The laplacian/snGrad limiter differs: `limited 0.333` in the adjoint vs `limited corrected 0.5`.
-  - These are the adjoint-stability settings in `part2-simulation/openfoam_adjoint.py`. The mismatch is real, but it is a 2.5 % change in the base flow. It is unlikely to turn a -1.2 mN measured response into a predicted 0.
+  - The laplacian/snGrad limiter also differs (`limited 0.333` in the adjoint vs `limited corrected 0.5`).
+  - The more likely cause of the gap is the different mesh (375 k vs 520 k cells, above). The earlier explanation by the limiter alone is superseded.
 
 ## Physics found
 

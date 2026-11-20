@@ -134,19 +134,26 @@ The design side (`geometry.py`) is unchanged:
 7. **Build the exact surface** and weigh it (foam, lead, centre of mass).
 8. **Export** `cars/<id>/`: `body_mm.stl` (the body, STEP frame, mm), STLs for OpenFOAM, `mass.json`.
 
-**The SimScale air volume** (`simscale_step_domain.build_faceted`). SimScale's API cannot extract a flow volume, and it splits multi-solid STL uploads into pieces, so we send it the air itself, the way the team's Fusion add-in does:
+**The SimScale air volume** (`simscale_step_domain.build_design`). SimScale's API cannot extract a flow volume, and it splits multi-solid STL uploads into pieces, so we send it the air itself, the way the team's Fusion add-in does:
 
 | Part | How it goes into the STEP |
 |---|---|
-| The car body (half, +y) | the exact watertight body mesh (the same one OpenFOAM uses), reduced to **20,000** well-shaped triangles (pymeshlab quadric collapse: quality threshold, no flipped triangles, flat areas kept flat). Measured error vs the full mesh: **0.0002–0.0004 mm average**, 0.07–0.36 mm at the worst point. |
-| Wheels | exact B-rep from the team's STEP |
-| Air | the half tunnel box minus the above, ONE solid; road 0.15 mm under the wheels |
+| The car outside the sidepod region | the team's **exact** B-rep, cut by the region grown 0.3 mm (`seam_region`) |
+| The designed sidepod (+y side) | the designed body inside that same grown region, reduced to about **4500** well-shaped triangles (pymeshlab quadric collapse). The band between the region and the seam is the original shape, so nothing changes. |
+| Wheels | exact B-rep |
+| Air | the half tunnel box minus all of the above, ONE solid; road 0.15 mm under the wheels |
 
-Faces are named in the STEP (inlet, outlet, symmetry, side, top, ground, wheelF, wheelR; every other face is the car), and SimScale keeps the names. Checks before upload: one solid (air sealed inside the body is dropped and logged), all 8 names present, removed volume = car + wheels (±0.3 %), worst shape error under 0.5 mm.
+Faces are named in the STEP (inlet, outlet, symmetry, side, top, ground, wheelF, wheelR; every other face is the car), and SimScale keeps the names. Checks before upload: one solid (air sealed inside the body is dropped and logged), all 8 names present, removed volume = car + wheels (±0.3 %).
 
-**Why the whole body as triangles, not exact CAD plus a triangle pod.** We tried that first. SimScale's import (it reports why in `failureReason`) rejected about 2 in 3 such files: wherever triangles lie within hundredths of a millimetre of an exact CAD surface (the seam strip, the sidepod top plane) it finds "bad face-face" and "invalid edge" faults it cannot heal. One consistent triangle surface has no seams.
+**How this route was found** (SimScale reports why an import fails in `failureReason`; read it before changing anything):
 
-**Imports SimScale still refuses.** About 2 files in 5 fail with "fault-face-tessellation_failed" on a single face. The same file always fails, so the evaluator rebuilds the body with another triangle count (20k → 16k → 24k → 12k → 18k → 22k) and imports again: each try changes the shape by thousandths of a mm and takes 2–4 minutes. The reason is logged in `tries`. Mesh failures (e.g. "mesh too coarse" on a sliver) get the same treatment.
+| Tried | Result |
+|---|---|
+| Exact CAD + triangle pod, seam ON the region boundary, 0.05 mm overlap | about 2 in 3 imports refused: "invalid edge" / "bad face-face". The region's planes (the 27.175 mm sidepod top, the spine underside at z = 17) are planes of the team's CAD, so the seam lay on CAD faces. |
+| Whole half body as 20k triangles | imports, but meshing fails ("element size too close to the CAD tolerance"): the team's CAD has 263 faces under 0.1 mm², whose triangles are 0.04 mm wide. Raising small-feature suppression to 0.2 mm meshes, but only with boundary layers off. |
+| **Seam moved 0.3 mm off the region, no overlap** | **3 of 3 designs imported first time; both tested meshed with boundary layers.** Any overlap (0.02–0.1 mm) breaks the OpenCASCADE cut on some cars. |
+
+If SimScale still refuses one, the evaluator rebuilds the pod with another triangle count (4500 → 5200 → 3900 → 6000 → 4200 → 6800) and tries again; mesh failures get the same treatment. The reasons are logged in `tries`.
 
 **Per car, the evaluator (`simscale_step_eval.py`) walks:**
 
@@ -229,7 +236,7 @@ Each batch goes up as a release asset; results come back as workflow artifacts. 
 | `status` shows `capacity: 0` | every key has used its runs: add keys (section 6) |
 | a key `retired` with a quota/401 message | that account is out of credit or the key was reset; its cars move to the next key |
 | a car stuck with `last_error` | read the message: a proxy/network error clears itself; anything else is a bug to fix (the car is not blamed) |
-| "import refused 6 times" | a body SimScale won't take at any triangle count (rare); the design counts as failed. `tries` has SimScale's reasons |
+| "import refused 6 times" | a pod SimScale won't take at any triangle count (rare); the design counts as failed. `tries` has SimScale's reasons |
 | "named faces missing after import" | the STEP lost its face names (check `simscale_step_domain.write_step`) |
 | "too expensive" in `designs.jsonl` | the estimate exceeded `max_cost` (core-hours) |
 | Everything illegal | read `check` in `designs.jsonl`: thin foam or pieces usually means the step size is too large (lower CMA `"sigma"`) |
@@ -239,7 +246,7 @@ Each batch goes up as a release asset; results come back as workflow artifacts. 
 | Part | Status |
 |---|---|
 | Rules (cargo off, 27.175 mm ceiling, top/bottom milling, 3 mm walls, one piece), exact watertight export | tested |
-| Air volume STEP (whole half body as 20k triangles + exact wheels), names surviving SimScale's import | tested on SimScale: evolved designs import as one body with all names (about 3 in 5 on the first triangle count) |
+| Air volume STEP (exact CAD + triangle pod, seam 0.3 mm off the region), names surviving SimScale's import | tested on SimScale: 3 evolved designs imported first time, 2 meshed with boundary layers |
 | Simulation + mesh built from code, run on SimScale | tested: the team car meshed (5.7 M cells) and ran |
 | Campaign → SimScale (keys, retries, import re-tries) | smoke-tested on SimScale up to meshing |
 | Force reading | see the status line at the top |

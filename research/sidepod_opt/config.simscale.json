@@ -1,5 +1,5 @@
 {
- "_comment": "Evolution on SimScale, STEP air-volume route (simscale_step_eval.py). Keys: export SIMSCALE_API_KEYS='k1,k2,...' (never in a file in the repo). Each key runs at most runs_per_key cars, then the next key is used; when all are used the campaign waits (`python campaign.py tick <dir>` reports it). Every car, the team's included, goes through the same route: the half body as ~20k triangles (simscale_step_domain.build_faceted), exact wheels, road 0.15 mm under the wheels. The winners are re-timed in our OpenFOAM pipeline on GitHub Actions (stage recheck).",
+ "_comment": "Evolution on SimScale, STEP air-volume route (simscale_step_eval.py). Keys: export SIMSCALE_API_KEYS='k1,k2,...' (never in a file in the repo). Each key runs at most runs_per_key cars, then the next key is used; when all are used the campaign waits (`python campaign.py tick <dir>` reports it). Every car goes through the same route (simscale_step_domain.build_design): the team's exact CAD outside the sidepod region, the pod as ~4500 triangles, seam 0.3 mm off the region, exact wheels, road 0.15 mm under the wheels. The winners are re-timed in our OpenFOAM pipeline on GitHub Actions (stage recheck).",
  "h_mm": 1.0,
  "car": {
   "cargo": false,

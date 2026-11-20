@@ -157,6 +157,11 @@ external topology case was **not found** in their material (that is not proof it
   (from HANDOFF_LOCAL.md §4): measured pair half-difference (D₊ − D₋)/2; every clear pair
   (|Δ| ≥ 3σ) must have the adjoint's predicted sign, and predicted/measured must be within 0.5–2.
   Judge: `dafoam/pair_judge.py`. Fail → the loop is not run.
+- **2026-11-20 17:57, bumps lost twice to container restarts.** The cloud container restarted at
+  ~17:41 and ~17:57, both while the session sat idle between messages; the detached bump jobs died
+  right as their solvers started. Files, installs and the gradient survived; swap had to be
+  re-enabled. Lesson: in this cloud session, long jobs survive only while a session-tracked
+  background task is running. Relaunched 17:57 with a tracked watcher; expected ~19:20 UTC.
 
 ## Sources
 

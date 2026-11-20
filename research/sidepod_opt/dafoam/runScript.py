@@ -29,6 +29,9 @@ K0, OMEGA0 = 0.015, 202.7027
 GMRES_TOL = float(os.environ.get("DAF_GMRES_TOL", "1e-6"))
 GMRES_IT = int(os.environ.get("DAF_GMRES_ITERS", "2000"))
 FILL = int(os.environ.get("DAF_PC_FILL", "1"))
+# preconditioner-matrix connectivity: DAFoam's default (2, phi 1) needs > 15 GB for this 520 k-cell
+# case; level 1 (phi 0) is far sparser: less memory, more GMRES iterations
+PC_LV = int(os.environ.get("DAF_PC_LEVEL", "1"))
 
 daOptions = {
     "solverName": "DASimpleFoam",
@@ -51,6 +54,7 @@ daOptions = {
     "adjEqnOption": {"gmresRelTol": GMRES_TOL, "gmresAbsTol": 1.0e-16, "gmresMaxIters": GMRES_IT,
                      "gmresRestart": GMRES_IT, "pcFillLevel": FILL, "jacMatReOrdering": "rcm"},
     "adjPCLag": 1,
+    "maxResConLv4JacPCMat": {"pRes": PC_LV, "phiRes": max(PC_LV - 1, 0), "URes": PC_LV, "kRes": PC_LV, "omegaRes": PC_LV},
     "checkMeshThreshold": {"maxAspectRatio": 1000.0, "maxNonOrth": 70.0, "maxSkewness": 6.0,
                            "maxIncorrectlyOrientedFaces": 0},
     "inputInfo": {"aero_vol_coords": {"type": "volCoord", "components": ["solver", "function"]}},

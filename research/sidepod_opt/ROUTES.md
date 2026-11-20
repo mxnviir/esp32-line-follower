@@ -250,6 +250,32 @@ external topology case was **not found** in their material (that is not proof it
     The decision uses the exact mass, so it is still correct; the step is just less mass-efficient
     than intended. To fix between runs, not mid-run.
   - `morph_drift` can't read a fresh (binary) mesh; it works on morphed steps (ASCII).
+- **2026-11-20 20:45, EARLY PRODUCTION RANKING CHECK PASSED.** Production schemes (linearUpwind U),
+  production state A's coarse mesh morphed onto each car, warm-started, 1,000 iterations
+  (`prodcheck.py`, `gate_results_coarse/prodcheck_*.json`):
+
+  | car | production D20 half car | stderr |
+  |---|---|---|
+  | seed (team pod, re-surfaced) | 179.92 mN | 0.42 mN |
+  | step 1 | **173.08 mN** | 0.51 mN |
+
+  Change −6.84 ± 0.66 mN (10σ), against the steady model's −8.50 mN half car: same sign, 80 % of the
+  size. Rule (fixed at 19:00): same sign and ≥ 3σ. **Pass.** On this change, the steady model ranks
+  like the production model. (Seed vs the exact-CAD zero run, 181.58 mN: the re-surfacing itself is
+  worth −1.7 mN.)
+- **2026-11-20 20:45, loop status** (`runs/cloud_original`, steady model, whole car):
+
+  | it | step | D20 | change | result |
+  |---|---|---|---|---|
+  | 0 | seed | 449.24 mN | | accepted |
+  | 1 | 1.5 mm | 432.25 mN | −16.99 (pred −44.8) | accepted |
+  | 2 | 1.5 mm | 429.13 mN | −3.11 (pred −24.9) | rejected: morph failed checkMesh, fresh mesh not comparable |
+  | 3 | 0.75 mm | **428.90 mN** | −3.34 | accepted; adjoint running |
+
+  Total −20.3 mN (−4.5 %). Measured/predicted falls with step size (0.38 at step 1), the usual sign
+  of curvature, so the shrinking steps are working as intended. Watch: repeated morph fallbacks as
+  the shape drifts from the seed's mesh. If they recur, re-base the lineage (re-solve the current
+  design on a fresh mesh and continue from it).
 
 ## Sources
 

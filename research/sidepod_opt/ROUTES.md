@@ -107,6 +107,21 @@ external topology case was **not found** in their material (that is not proof it
   first-order upwind U (k and ω were already upwind) for 3000 more iterations
   (`gate/refA_coarse_up`). If it converges ≥ 4 orders with force oscillation ≪ 1 mN, Krylov is
   re-run on it; the colouring depends only on the mesh, so the 15 min colouring is reused.
+- **2026-11-20 15:42, the upwind-U state is steady.**
+
+  | | production (linearUpwind U) | first-order upwind U |
+  |---|---|---|
+  | Ux / p initial residual at the end | ~1e-3 / ~1e-2 | 3e-6 / 1e-5 (flat from it. ~2250) |
+  | half-car Fx, mean of last 500 its | 181.04 mN | 228.72 mN (**+26 %**) |
+  | Fx range over last 500 its | 2.80 mN | 0.02 mN |
+
+  So the non-convergence is the second-order convection on this wake, and first-order upwind
+  removes it, at the cost of a much more diffusive flow model. A gradient of this model is only
+  useful if the model **ranks sidepod changes like the production model does**: the same ±1 mm
+  bumps must be measured with both schemes (rank check), on top of the adjoint-vs-measured check.
+  If the ranking disagrees, try a middle scheme (e.g. `limitedLinearV 1`, a TVD scheme) that may
+  converge with less smearing. DAFoam Krylov launched on this state (`gate/dafoam_coarseA_up`);
+  the colouring is recomputed (`run_docker.sh` deletes it before renumbering).
 
 ## Sources
 

@@ -85,6 +85,13 @@ class Columns:
         s = car.s
         self.lean = car.finish(np.full(car.body0.shape, -1.0))         # keep | cargo: no sidepod
         reg = car.region & (car.zs[None, None, :] <= Z_CEIL_MM - 0.5 * car.h)
+        # the pods must COVER the virtual cargo: a 3 mm foam wall around its sides, front and back (in plan),
+        # wherever that is sidepod region under the ceiling; its top is the ceiling itself
+        k = int(round(T_MIN_MM / car.h))
+        disk = (np.arange(-k, k + 1)[:, None] ** 2 + np.arange(-k, k + 1)[None, :] ** 2) <= k * k
+        cover = ndimage.binary_dilation(car.cargo, structure=disk[:, :, None]) & reg
+        self.cargo_cover_mm3 = float((cover & ~self.lean).sum() * car.h ** 3)
+        self.lean = self.lean | cover
         self.reg = reg
         self.ypos = np.nonzero(car.ys >= 0)[0]                          # the +y half of the grid
         R = reg[:, self.ypos, :]

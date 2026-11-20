@@ -13,7 +13,8 @@
   "com_x_car_mm": 165.08690217959372,
   "com_z_mm": 22.4499976005884
  },
- "grad_ready": false,
+ "grad_ready": true,
  "L_current": 0.24142620888213753,
- "best_it": 4
+ "best_it": 4,
+ "stale_grad": 1
 }

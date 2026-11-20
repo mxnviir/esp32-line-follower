@@ -242,32 +242,59 @@ def _sh(cmd, cwd):
 
 # ---------------------------------------------------------------------- SimScale
 class SimScaleEvaluator(Evaluator):
-    """SimScale via its Python SDK (pip install simscale-sdk). Set up ONE template simulation in the
-    web UI on the original car (imported as the same named STL solids: car, wheelF, wheelR, ...):
-    rolling road, rotating wheels, k-omega SST, a 'Forces and moments' result control on the car + wheels.
-    Each design: upload its STLs, import, clone the template with every face reference re-mapped
-    BY SOLID NAME onto the new geometry, mesh, run, read the force plot.
+    """SimScale via its Python SDK. Set up ONE template in the web UI on the original car (imported
+    as the same named STL solids: body_full or car, wheelF, wheelR): k-omega SST, rolling road,
+    rotating wheels, a 'Forces and moments' result control on the car + wheels, and ONE mesh
+    operation on it (its settings are copied for every design). See SIMSCALE.md.
+
+    Every design walks import -> mesh -> run as a state machine kept in `state_path` (JSON), so a
+    batch survives between cron ticks and nothing blocks: submit() only uploads and starts the
+    imports, collect() advances every case one step and returns the finished ones.
+    Each case is cost-checked before its run starts (SimScale's own estimate, `max_cost`).
 
     Calls checked against the SDK source (github.com/SimScaleGmbH/simscale-python-sdk, examples/
-    incompressible_example.py); NOT run against SimScale from here (no network access to it).
-    Install: pip install git+https://github.com/SimScaleGmbH/simscale-python-sdk.git"""
+    incompressible_example.py) and by a mocked test (test_simscale.py); not yet run against SimScale.
+    Install: git clone the SDK and `pip install ./simscale-python-sdk` (it is not on PyPI)."""
     name = "simscale"
 
-    def __init__(self, project_id: str, template_sim_id: str, mesh_template_id: str | None = None,
-                 speed_mps=20.0, poll_s=60, symmetric_half=False, bodies=("car", "wheelF", "wheelR"),
-                 force_result_name="Forces and moments"):
+    def __init__(self, project_id: str, template_sim_id: str, mesh_template_id: str, state_path: Path,
+                 speed_mps=20.0, symmetric_half=True, bodies=None,
+                 force_result_name="Forces and moments", max_cost=None, sdk=None, api_client=None):
         super().__init__()
-        import simscale_sdk as sim
-        self.sim = sim
-        cfg = sim.Configuration()
-        cfg.host = os.environ.get("SIMSCALE_API_URL", "https://api.simscale.com") + "/v0"
-        cfg.api_key = {"X-API-KEY": os.environ["SIMSCALE_API_KEY"]}
-        self.api = sim.ApiClient(cfg)
-        self.api.rest_client.pool_manager.connection_pool_kw["timeout"] = 120
-        self.project, self.template, self.mesh_template = project_id, template_sim_id, mesh_template_id
-        self.speed, self.poll_s, self.half = speed_mps, poll_s, symmetric_half
-        self.bodies, self.force_name = list(bodies), force_result_name
-        self.running = {}                                         # id -> (sim_id, run_id)
+        if sdk is None:
+            import simscale_sdk as sdk
+        self.sim = sdk
+        if api_client is None:
+            cfg = sdk.Configuration()
+            cfg.host = os.environ.get("SIMSCALE_API_URL", "https://api.simscale.com") + "/v0"
+            cfg.api_key = {"X-API-KEY": os.environ["SIMSCALE_API_KEY"]}
+            api_client = sdk.ApiClient(cfg)
+            api_client.rest_client.pool_manager.connection_pool_kw["timeout"] = 120
+        self.api = api_client
+        self.project, self.template, self.mesh_template = str(project_id), template_sim_id, mesh_template_id
+        self.speed, self.half, self.max_cost = speed_mps, symmetric_half, max_cost
+        self.bodies = list(bodies or (["car", "wheelF", "wheelR"] + ([] if symmetric_half else ["wheelF_m", "wheelR_m"])))
+        self.force_name = force_result_name
+        self.state_path = Path(state_path)
+        self.cases = json.loads(self.state_path.read_text()) if self.state_path.exists() else {}
+        self._tmpl = None
+
+    # ---------------------------------------------------------------- helpers
+    def _save(self):
+        self.state_path.parent.mkdir(parents=True, exist_ok=True)
+        self.state_path.write_text(json.dumps(self.cases, indent=1))
+
+    def _fail(self, cid, why):
+        self.cases.pop(cid, None)
+        self._done[cid] = {"D20_N": None, "L20_N": None, "ok": False, "info": {"simscale": str(why)[:500]}}
+
+    def _template(self):
+        if self._tmpl is None:
+            s_api = self.sim.SimulationsApi(self.api)
+            tmpl = s_api.get_simulation(self.project, self.template)
+            m_api = self.sim.MeshOperationsApi(self.api)
+            self._tmpl = (tmpl, self._entity_names(tmpl.geometry_id), m_api.get_mesh_operation(self.project, self.mesh_template))
+        return self._tmpl
 
     def _upload(self, folder: Path, name: str):
         import zipfile
@@ -276,20 +303,16 @@ class SimScaleEvaluator(Evaluator):
         with zipfile.ZipFile(z, "w") as zf:
             for f in (["car_half.stl", "wheelF.stl", "wheelR.stl"] if self.half else ["body_full.stl", "wheelF.stl", "wheelR.stl"]):
                 zf.write(folder / f, f)
+            if not self.half:                                     # whole car: the -y wheels, mirrored
+                for w in ("wheelF", "wheelR"):
+                    zf.writestr(f"{w}_m.stl", _mirrored_stl(folder / f"{w}.stl", f"{w}_m"))
         st = sim.StorageApi(self.api).create_storage()
         self.api.rest_client.PUT(url=st.url, headers={"Content-Type": "application/octet-stream"}, body=z.read_bytes())
-        gi_api = sim.GeometryImportsApi(self.api)
         req = sim.GeometryImportRequest(name=name, location=sim.GeometryImportRequestLocation(st.storage_id),
                                         format="STL", input_unit="m",
                                         options=sim.GeometryImportRequestOptions(facet_split=False, sewing=False, improve=True,
                                                                                  optimize_for_lbm_solver=False))
-        gi = gi_api.import_geometry(self.project, req)
-        while gi.status not in ("FINISHED", "CANCELED", "FAILED"):
-            time.sleep(10)
-            gi = gi_api.get_geometry_import(self.project, gi.geometry_import_id)
-        if gi.status != "FINISHED":
-            raise RuntimeError(f"SimScale import {gi.status}: {getattr(gi, 'failure_reasons', '')}")
-        return gi.geometry_id
+        return sim.GeometryImportsApi(self.api).import_geometry(self.project, req).geometry_import_id
 
     def _entity_names(self, geometry_id):
         """face entity name -> body (solid) name, for the solids the car folder exports."""
@@ -306,59 +329,121 @@ class SimScaleEvaluator(Evaluator):
                 page += 1
         return out
 
+    # ---------------------------------------------------------------- interface
     def submit(self, cases):
-        sim = self.sim
-        s_api = sim.SimulationsApi(self.api)
-        r_api = sim.SimulationRunsApi(self.api)
-        tmpl = s_api.get_simulation(self.project, self.template)
-        old_names = self._entity_names(tmpl.geometry_id)
         for c in cases:
-            gid = self._upload(Path(c["folder"]), c["id"])
-            new = self._entity_names(gid)
+            try:
+                gi = self._upload(Path(c["folder"]), c["id"])
+                self.cases[c["id"]] = {"phase": "import", "import_id": gi, "t0": time.time()}
+            except Exception as e:                                     # one bad case never stops the batch
+                self._fail(c["id"], f"upload: {e!r}")
+            self._save()
+
+    def collect(self):
+        for cid in list(self.cases):
+            try:
+                self._advance(cid)
+            except Exception as e:
+                self._fail(cid, f"{self.cases.get(cid, {}).get('phase')}: {e!r}")
+            self._save()
+        return super().collect()
+
+    def _advance(self, cid):
+        sim, c = self.sim, self.cases[cid]
+        if c["phase"] == "import":
+            gi = sim.GeometryImportsApi(self.api).get_geometry_import(self.project, c["import_id"])
+            if gi.status in ("FAILED", "CANCELED"):
+                return self._fail(cid, f"import {gi.status}: {getattr(gi, 'failure_reasons', '')}")
+            if gi.status != "FINISHED":
+                return
+            tmpl, old_names, mesh_t = self._template()
+            new = self._entity_names(gi.geometry_id)
             by_body = {}
             for eid, body in new.items():
                 by_body.setdefault(body, []).append(eid)
+            missing = set(self.bodies) - set(by_body)
+            if missing:
+                return self._fail(cid, f"solids missing after import: {sorted(missing)}")
             spec = self.api.sanitize_for_serialization(tmpl)
-            spec["geometryId"] = gid
-            spec["name"] = f"sidepod {c['id']}"
+            spec.pop("simulationId", None); spec.pop("meshId", None)
+            spec["geometryId"] = gi.geometry_id
+            spec["name"] = f"sidepod {cid}"
             _remap_entities(spec, old_names, by_body)
+            s_api, m_api = sim.SimulationsApi(self.api), sim.MeshOperationsApi(self.api)
             new_sim = s_api.create_simulation(self.project, self.api._ApiClient__deserialize(spec, "SimulationSpec"))
-            if self.mesh_template:
-                m_api = sim.MeshOperationsApi(self.api)
-                mt = m_api.get_mesh_operation(self.project, self.mesh_template)
-                mo = m_api.create_mesh_operation(self.project, sim.MeshOperation(name=f"mesh {c['id']}", geometry_id=gid,
-                                                                                   model=mt.model))
-                m_api.start_mesh_operation(self.project, mo.mesh_operation_id, simulation_id=new_sim.simulation_id)
-                while m_api.get_mesh_operation(self.project, mo.mesh_operation_id).status not in ("FINISHED", "FAILED", "CANCELED"):
-                    time.sleep(self.poll_s)
-                spec2 = s_api.get_simulation(self.project, new_sim.simulation_id)
-                spec2.mesh_id = mo.mesh_id
-                s_api.update_simulation(self.project, new_sim.simulation_id, spec2)
-            run = r_api.create_simulation_run(self.project, new_sim.simulation_id, sim.SimulationRun(name="run"))
-            r_api.start_simulation_run(self.project, new_sim.simulation_id, run.run_id)
-            self.running[c["id"]] = (new_sim.simulation_id, run.run_id)
-
-    def collect(self):
-        r_api = self.sim.SimulationRunsApi(self.api)
-        for cid, (sid, rid) in list(self.running.items()):
-            run = r_api.get_simulation_run(self.project, sid, rid)
-            if run.status not in ("FINISHED", "FAILED", "CANCELED"):
-                continue
-            self.running.pop(cid)
+            mo = m_api.create_mesh_operation(self.project, sim.MeshOperation(name=f"mesh {cid}", geometry_id=gi.geometry_id,
+                                                                               model=mesh_t.model))
+            chk = m_api.check_mesh_operation_setup(self.project, mo.mesh_operation_id, simulation_id=new_sim.simulation_id)
+            errs = [e for e in (getattr(chk, "entries", None) or []) if e.severity == "ERROR"]
+            if errs:
+                return self._fail(cid, f"mesh check: {errs}")
+            m_api.start_mesh_operation(self.project, mo.mesh_operation_id, simulation_id=new_sim.simulation_id)
+            c.update(phase="mesh", geometry_id=gi.geometry_id, sim_id=new_sim.simulation_id, mesh_op=mo.mesh_operation_id)
+        elif c["phase"] == "mesh":
+            m_api, s_api = sim.MeshOperationsApi(self.api), sim.SimulationsApi(self.api)
+            mo = m_api.get_mesh_operation(self.project, c["mesh_op"])
+            if mo.status in ("FAILED", "CANCELED"):
+                return self._fail(cid, f"mesh {mo.status}")
+            if mo.status != "FINISHED":
+                return
+            spec = s_api.get_simulation(self.project, c["sim_id"])
+            spec.mesh_id = mo.mesh_id
+            s_api.update_simulation(self.project, c["sim_id"], spec)
+            chk = s_api.check_simulation_setup(self.project, c["sim_id"])
+            errs = [e for e in (getattr(chk, "entries", None) or []) if e.severity == "ERROR"]
+            if errs:
+                return self._fail(cid, f"simulation check: {errs}")
+            cost = None
+            try:
+                est = s_api.estimate_simulation_setup(self.project, c["sim_id"])
+                cost = est.compute_resource.value if est.compute_resource is not None else None
+            except sim.ApiException as e:
+                if e.status != 422:                               # 422: no estimate available
+                    raise
+            if self.max_cost is not None and cost is not None and cost > self.max_cost:
+                return self._fail(cid, f"too expensive: estimate {cost} > max_cost {self.max_cost}")
+            r_api = sim.SimulationRunsApi(self.api)
+            run = r_api.create_simulation_run(self.project, c["sim_id"], sim.SimulationRun(name="run"))
+            r_api.start_simulation_run(self.project, c["sim_id"], run.run_id)
+            c.update(phase="run", run_id=run.run_id, cost_estimate=cost)
+        elif c["phase"] == "run":
+            r_api = sim.SimulationRunsApi(self.api)
+            run = r_api.get_simulation_run(self.project, c["sim_id"], c["run_id"])
+            if run.status in ("FAILED", "CANCELED"):
+                return self._fail(cid, f"run {run.status}")
             if run.status != "FINISHED":
-                self._done[cid] = {"D20_N": None, "L20_N": None, "ok": False, "info": {"simscale": "FAILED"}}
-                continue
-            res = r_api.get_simulation_run_results(self.project, sid, rid, category="FORCE_PLOT", name=self.force_name)
+                return
+            res = r_api.get_simulation_run_results(self.project, c["sim_id"], c["run_id"], category="FORCE_PLOT",
+                                                   name=self.force_name)
             Fx = Fz = None
             for item in res.embedded:
-                url = item.download.url
-                txt = self.api.rest_client.GET(url, headers={"X-API-KEY": os.environ["SIMSCALE_API_KEY"]}).data.decode()
-                Fx, Fz = _last_force_row(txt)
+                txt = self.api.rest_client.GET(item.download.url, headers={"X-API-KEY": self.api.configuration.api_key["X-API-KEY"]}).data
+                Fx, Fz = _last_force_row(txt.decode() if isinstance(txt, bytes) else txt)
             k = 2.0 if self.half else 1.0
-            self._done[cid] = {"D20_N": Fx * k * (20.0 / self.speed) ** 2 if Fx is not None else None,
-                               "L20_N": Fz * k * (20.0 / self.speed) ** 2 if Fz is not None else None,
-                               "ok": Fx is not None, "info": {"simscale_sim": sid, "run": rid}}
-        return super().collect()
+            sc = k * (20.0 / self.speed) ** 2
+            self.cases.pop(cid)
+            self._done[cid] = {"D20_N": Fx * sc if Fx is not None else None, "L20_N": Fz * sc if Fz is not None else None,
+                               "ok": Fx is not None,
+                               "info": {"simscale_sim": c["sim_id"], "run": c["run_id"], "cost_estimate": c.get("cost_estimate"),
+                                        "wall_s": time.time() - c["t0"]}}
+
+
+def _mirrored_stl(path: Path, solid: str) -> str:
+    """The +y wheel STL mirrored to -y (y -> -y, winding reversed so normals stay outward), ASCII."""
+    import trimesh
+    m = trimesh.load(path, process=False)
+    v = m.vertices * np.array([1.0, -1.0, 1.0])
+    f = m.faces[:, ::-1]
+    tri = v[f]
+    n = np.cross(tri[:, 1] - tri[:, 0], tri[:, 2] - tri[:, 0])
+    n /= np.linalg.norm(n, axis=1, keepdims=True) + 1e-300
+    out = [f"solid {solid}"]
+    for nn, t in zip(n, tri):
+        out.append(f"facet normal {nn[0]:.9e} {nn[1]:.9e} {nn[2]:.9e}\n outer loop")
+        out += [f"  vertex {p[0]:.9e} {p[1]:.9e} {p[2]:.9e}" for p in t]
+        out.append(" endloop\nendfacet")
+    out.append(f"endsolid {solid}")
+    return "\n".join(out) + "\n"
 
 
 def _remap_entities(node, old_names, by_body):

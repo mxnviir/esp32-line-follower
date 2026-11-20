@@ -237,6 +237,27 @@ class Car:
         op = ndimage.binary_opening(B, ball)
         return B & self.region & ~op & (ndimage.distance_transform_edt(~op) > 1.0)
 
+    def min_wall(self, B, rep, max_passes=5):
+        """Minimum-feature filter (as in topology optimisation): while the design has thin foam, open
+        the region foam by the 3 mm wall ball (removes fins and slivers; the team's own thin CAD edges
+        are kept) and mill again (the mill may fill air the cutter can't reach). A design that is
+        already clean is not touched. Returns (B, passes); the check still rejects what stays thin."""
+        if self.thin_foam_mm3(B) <= 30.0:
+            return B, 0
+        rr = MIN_FOAM_WALL_MM / 2 / self.h
+        k = np.arange(-int(np.ceil(rr)), int(np.ceil(rr)) + 1)
+        ball = (k[:, None, None] ** 2 + k[None, :, None] ** 2 + k[None, None, :] ** 2) <= rr * rr
+        for n in range(1, max_passes + 1):
+            pod = B & self.region
+            op = ndimage.binary_opening(pod | (self.body0 & ~self.region), ball, border_value=1) & self.region
+            B = np.where(self.region, op | (pod & self._thin0), B) | self.cargo
+            B, r2 = self.mill(B)
+            for key, v in r2.items():
+                rep[key] = rep.get(key, 0.0) + v
+            if self.thin_foam_mm3(B) <= 30.0:
+                break
+        return B, n
+
     def thin_foam_mm3(self, B):
         """Thin foam the DESIGN made: thin cells that are not already thin on the team's original
         (its own CAD edges are thin at this test: 32 mm3 at 1 mm, 226 mm3 at 0.5 mm)."""
@@ -264,10 +285,25 @@ class Car:
         the designed surface inside it."""
         if original:
             return self.body_mesh.copy()
+        # The Boolean with the CAD is exact, but where the designed surface happens to graze a CAD
+        # edge it leaves sub-micron slivers that welding (as any STL reader does) turns non-manifold.
+        # Such coincidences are chance: retry with a slightly different smoothing (a few um of surface
+        # change), first that passes wins.
+        err = None
+        for sigma in (0.7, 0.72, 0.68, 0.75, 0.65):
+            try:
+                out = self._pod_union(B, sigma)
+                CI.accept(out, name="designed body")
+                return out
+            except ValueError as e:
+                err = e
+        raise err
+
+    def _pod_union(self, B, sigma):
         import trimesh
         from skimage import measure
         P = np.pad(B.astype(np.float32), 2)
-        P = ndimage.gaussian_filter(P, 0.7)
+        P = ndimage.gaussian_filter(P, sigma)
         v, f, _n, _ = measure.marching_cubes(P, 0.5)
         h = self.h
         v = np.c_[self.xs[0] + (v[:, 0] - 2) * h, self.ys[0] + (v[:, 1] - 2) * h, self.zs[0] + (v[:, 2] - 2) * h]
@@ -277,9 +313,7 @@ class Car:
         if not m.is_watertight:
             m = CI.repair(m)
         pod_M = CI.to_manifold(m) ^ self.region_Me                  # ^ = intersection in manifold3d
-        out = CI.clean(CI.from_manifold(self.kept_M + pod_M))      # weld Boolean seams as a reader will
-        CI.accept(out, name="designed body")
-        return out
+        return CI.clean(CI.from_manifold(self.kept_M + pod_M))     # weld Boolean seams as a reader will
 
     def mass(self, body_mesh) -> dict:
         s = self.s
@@ -300,6 +334,7 @@ class Car:
     def build(self, field_mm: np.ndarray, original: bool = False) -> dict:
         """Field -> milled voxels -> checks; the exact mesh and mass only for a car that passes."""
         B, rep = self.mill(self.finish(field_mm))
+        B, rep["min_wall_passes"] = self.min_wall(B, rep)
         chk = self.check(B)
         out = dict(voxels=B, mill=rep, check=chk, mesh=None, mass=None)
         if chk["ok"]:

@@ -82,8 +82,10 @@ class Campaign:
                                                     release=spec.get("release", "sidepod-jobs"), refs_tag=spec.get("refs_tag", ""),
                                                     mode=spec.get("mode", "auto"), iters=spec.get("iters", 1000))
             elif k == "simscale":
-                self._ev[key] = EV.SimScaleEvaluator(spec["project_id"], spec["template_sim_id"], spec.get("mesh_template_id"),
-                                                     symmetric_half=spec.get("half", False))
+                self._ev[key] = EV.SimScaleEvaluator(spec["project_id"], spec["template_sim_id"], spec["mesh_template_id"],
+                                                     self.root / "simscale_inflight.json",
+                                                     speed_mps=spec.get("speed_mps", 20.0), symmetric_half=spec.get("half", True),
+                                                     max_cost=spec.get("max_cost"))
             elif k == "adjoint":
                 self._ev[key] = EV.AdjointEvaluator(self.car, self.rm, spec.get("backend", "esi"), spec.get("res", "medium"))
             else:
@@ -145,6 +147,7 @@ class Campaign:
         if p.exists():
             with open(p, "rb") as f:
                 m = pickle.load(f)
+            m.rep = self.representation(mname, o)
             if mname == "sail":
                 m.descriptor = lambda x, rep=m.rep: _descriptor(self.car, rep.field(x))
             return m
@@ -172,7 +175,7 @@ class Campaign:
         p = self.root / "runs" / (run_id.replace(":", "_") + ".pkl")
         p.parent.mkdir(parents=True, exist_ok=True)
         detached = {}
-        for attr in ("cfg", "descriptor"):
+        for attr in ("cfg", "descriptor", "rep"):         # rep holds the car (exact CAD objects): rebuilt on load
             if hasattr(m, attr):
                 detached[attr] = getattr(m, attr); setattr(m, attr, None)
         try:

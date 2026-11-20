@@ -128,6 +128,26 @@ external topology case was **not found** in their material (that is not proof it
   stalled at 1.87e-2. **The stall was the unsteady primal**, as diagnosed. The 1e-6 relative
   target is out of reach in 2000 iterations at this rate; whether the partly converged gradient is
   good enough is exactly what the bump check decides.
+- **2026-11-20 16:23, gradient solved, then killed by memory at the last step.** GMRES hit its
+  2000-iteration cap at 1.9e-6 (from 2.75e-2: 7e-5 relative), then the final product
+  dR/dXv^T·ψ (which turns ψ into surface sensitivities) was OOM-killed on 16 GB. Added a 16 GB swap
+  file; re-run with the saved colouring (skips 15 min).
+- **2026-11-20, user decision:** overlap the remaining check with building the loop. A cut-down
+  check (3 ± pairs on the steady model, little noise) must agree in sign and roughly in size
+  before the loop's results are trusted.
+- **2026-11-20, `shape_loop.py` written** (route A loop): seed field → `Car.build` (rules, 3-axis
+  mill, min wall, checks) → coarse real-wall solve (steady scheme, warm-started) → reject and halve
+  the step if drag rose → DAFoam Krylov → dD/dn per surface point → 1 mm grid (mirrored, region
+  only) → Gaussian smoothing (2 mm) → level-set step, re-initialised as the signed distance of the
+  milled body. Seeds `original`, `lean`, `blend`, `block`, `channel` all build and pass the rules.
+  Cost per accepted step here: ~40 min (most of it colouring + GMRES); multi-start needs more
+  cores or colouring reuse (morph steps between remeshes).
+- **Manufacturing finding:** an enclosed lengthwise tunnel **cannot be milled**. The team's 3-axis
+  process (top, bottom, left, right set-ups) can't reach a bore along x; the mill rule filled a
+  5 mm bore through the team pod (pod 66.5 vs 67.5 cm³). Only open channels and grooves reachable
+  from a set-up direction are buildable, so the search can't produce closed tunnels, by the rules
+  of the process rather than any limit of the method. The open `channel` seed came out at 22.4 cm³
+  (more removed than the groove itself; to inspect).
 
 ## Sources
 

@@ -1358,7 +1358,11 @@ def build_case(run_dir: str, stl_path: str, cfg: OpenFOAMRunConfig) -> dict:
                              layer_controls=layer_controls,
                              layer_overrides=None if cfg.resolved else cfg.layer_overrides))
     _write(run / "system" / "controlDict", build_control_dict(cfg, frontal_area_half))
-    _write(run / "system" / "fvSchemes", _FV_SCHEMES)
+    # CFD_DIV_U (opt-in, research only): replace the U convection scheme, e.g. "bounded Gauss upwind"
+    # for a steady, adjoint-friendly flow model (research/sidepod_opt/ROUTES.md). Unset = production.
+    _write(run / "system" / "fvSchemes", _FV_SCHEMES.replace(
+        "bounded Gauss linearUpwind grad(U);", os.environ["CFD_DIV_U"].rstrip(";") + ";")
+        if os.environ.get("CFD_DIV_U") else _FV_SCHEMES)
     _write(run / "system" / "fvSolution", fv_solution(cfg))
     _write(run / "system" / "surfaceFeatureExtractDict",
            _header("dictionary", "surfaceFeatureExtractDict") + _SURFACE_FEATURE_EXTRACT_BODY)

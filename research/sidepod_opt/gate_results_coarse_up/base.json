@@ -1,0 +1,7 @@
+{
+ "D20_half_N": 0.22872,
+ "converged": true,
+ "note": "coarse state A restarted from refA_coarse (it. 2000) with div(phi,U) bounded Gauss upwind; 3000 more iterations, flat from ~2250; Fx = mean of its 4661-5161 of the forces FO (range 0.02 mN); fields written at 3000",
+ "run_dir_kept": "/home/user/esp32-line-follower/research/sidepod_opt/gate/refA_coarse_up",
+ "scheme_div_phi_U": "bounded Gauss upwind"
+}

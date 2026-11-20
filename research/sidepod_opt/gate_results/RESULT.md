@@ -24,6 +24,7 @@ There are three, not 8 rows: +/- twins and the 0.75/1.5 mm amplitudes share one 
 - **Objective patches** = `(car wheelF wheelR)`. That is the same set the `forces` function object (D20) integrates.
 - **Adjoint converged:** Ua initial residual 2.3e-6, pa 1.0e-5 at the end.
 - **The two adjoints agree with each other** (r = 0.82 per vertex): repeatable, but wrong.
+- **Correction (found while setting up DAFoam):** the "matched" adjoint was matched in wall layers and primal length only. Its mesh had **375,068 cells**; state A's mesh, the one the bumps were measured on, has **519,620** (`checkMesh`). ESI's adjoint path meshes the car itself and leaves out part of Part 2's refinement. Neither ESI adjoint solved the flow the bumps were measured in. That supports, but does not prove, the verdict below. The DAFoam test runs on state A's own mesh and flow.
 - **Remaining mismatch (open):** the adjoint solver's own primal gives D20 = 187.5 mN against the bumps' state A of 182.9 mN (+2.5 %).
   - The convection and gradient schemes are the same. The laplacian/snGrad limiter differs: `limited 0.333` in the adjoint vs `limited corrected 0.5`.
   - These are the adjoint-stability settings in `part2-simulation/openfoam_adjoint.py`. The mismatch is real, but it is a 2.5 % change in the base flow. It is unlikely to turn a -1.2 mN measured response into a predicted 0.

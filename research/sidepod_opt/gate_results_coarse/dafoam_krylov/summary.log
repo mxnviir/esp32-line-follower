@@ -1,0 +1,8 @@
+DAFOAM primal D_half = 0.182167 N  (52 s)
+Calculating dRdW Coloring... Completed! 898.76 s
+Main iteration 0 KSP Residual norm 2.745654457737e-02 1211.65 s. 
+Main iteration 100 KSP Residual norm 1.886122483213e-02 1263.76 s. 
+Main iteration 200 KSP Residual norm 1.870284708726e-02 1326.61 s. 
+Main iteration 300 KSP Residual norm 1.870283092501e-02 1376.18 s. 
+Main iteration 400 KSP Residual norm 1.870230912642e-02 1435.53 s. 
+Main iteration 500 KSP Residual norm 1.870230911924e-02 1484.39 s. 

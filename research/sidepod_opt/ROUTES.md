@@ -79,6 +79,28 @@ external topology case was **not found** in their material (that is not proof it
     Correct: `dJ/dbeta_i = topologySens_i · V_i`, no extra direct term.
   - The verdict on the topology adjoint stays **untested**; a re-check needs this fix and ≤ 1 mm
     steps. It does not rescue the porous route: the misranking was measured with real walls.
+- **2026-11-20 15:05, coarse state A reproduced here:** 181.03 mN half car, 424 s on 4 cores
+  (committed 180.99 mN). The two committed coarse bumps (`pod_rear`, `pod_front_m`) stay valid.
+- **2026-11-20 15:31, DAFoam Krylov adjoint on coarse state A: stagnated.** The first DAFoam run in
+  this repo to get past the Jacobian colouring: the earlier medium-mesh tries ran out of memory
+  (preconditioner > 15 GB, colouring > 40 GB), and the earlier coarse test stopped before DAFoam.
+  - DAFoam primal (300 its from state A): 182.17 mN, +1.1 mN (0.6 %) on OpenFOAM's state A, which is
+    the size of a bump signal. Its last p solve still starts at ~1e-2.
+  - Colouring 899 s, peak ~14.4 GB of 16. GMRES (restart 200, PC fill 0, level 1): 2.75e-2 → 1.89e-2
+    in 100 iterations, then flat to 9 digits through 500. Killed; summary in
+    `gate_results_coarse/dafoam_krylov/summary.log`.
+  - **Likely cause: the flow, not the solver.** State A never settles (residual floor ~1e-3, force
+    oscillation 1.5 % ≈ ±2.7 mN). A steady discrete adjoint of an unsteady wake is ill-posed: the
+    "unstable in separated flow" failure mode in the literature.
+  - **Decision rule, fixed before the probe:** run the fixed-point adjoint (no colouring, no PC).
+    - If its residual falls steadily by ≥ 3 orders, the preconditioner was the problem: let it
+      finish, run the bumps, judge against the marks above.
+    - If it floors or grows, the primal is the problem: build a smoothed testbed (first-order
+      upwind U/k/ω on the coarse mesh, converged ≥ 4 orders, force oscillation ≪ 1 mN), re-solve
+      state A and the bumps with those schemes, and re-run DAFoam. That tests the gradient on a
+      smoothed flow model, not the production schemes.
+    - Either way, the ESI shape adjoint on `refA_coarse`'s own mesh is the second candidate; the
+      current-scheme bumps serve it.
 
 ## Sources
 

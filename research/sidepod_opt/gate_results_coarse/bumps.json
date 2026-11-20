@@ -87,69 +87,34 @@
   "moved_vertices": 2487,
   "max_move_mm": 1.0
  },
- "null_pod_front": {
-  "site": "pod_front",
-  "amp_mm": 0.02,
-  "dV_mm3": 7.946952994305318
- },
- "nose_side_h": {
-  "site": "nose_side",
-  "amp_mm": 0.5,
-  "dV_mm3": 148.66250644687773
- },
- "pod_front_m": {
-  "site": "pod_front",
+ "pod_rear_m": {
+  "site": "pod_rear",
   "amp_mm": -1.0,
-  "dV_mm3": -391.3459575857569
+  "dV_mm3": -370.34101414044017
  },
  "pod_front_low_m": {
   "site": "pod_front_low",
   "amp_mm": -1.0,
   "dV_mm3": -378.63514332259524
  },
- "grad_p15": {
-  "site": "adjoint_gradient",
-  "amp_mm": 1.5,
-  "dV_mm3": -648.7055777272647,
-  "pred_mN_per_mm": 1.1170189094167062,
-  "share_within_3mm_of_top1pct_g": 0.2917450966656791,
-  "moved_vertices_over_10pct": 5388,
-  "clip": 11216.956,
-  "sigma_mm": 10.0
- },
- "grad_m15": {
-  "site": "adjoint_gradient",
-  "amp_mm": -1.5,
-  "dV_mm3": 788.3410351950721,
-  "pred_mN_per_mm": 1.1170189094167062,
-  "share_within_3mm_of_top1pct_g": 0.2917450966656791,
-  "moved_vertices_over_10pct": 5388,
-  "clip": 11216.956,
-  "sigma_mm": 10.0
- },
- "grad_p075": {
-  "site": "adjoint_gradient",
-  "amp_mm": 0.75,
-  "dV_mm3": -342.35644470597686,
-  "pred_mN_per_mm": 1.1170189094167062,
-  "share_within_3mm_of_top1pct_g": 0.2917450966656791,
-  "moved_vertices_over_10pct": 5388,
-  "clip": 11216.956,
-  "sigma_mm": 10.0
- },
- "grad_m075": {
-  "site": "adjoint_gradient",
-  "amp_mm": -0.75,
-  "dV_mm3": 377.2653518618213,
-  "pred_mN_per_mm": 1.1170189094167062,
-  "share_within_3mm_of_top1pct_g": 0.2917450966656791,
-  "moved_vertices_over_10pct": 5388,
-  "clip": 11216.956,
-  "sigma_mm": 10.0
- },
- "pod_rear_m": {
-  "site": "pod_rear",
+ "pod_front_m": {
+  "site": "pod_front",
   "amp_mm": -1.0,
-  "dV_mm3": -370.34101414044017
+  "dV_mm3": -391.3459575857569
+ },
+ "pod_rear_low_m": {
+  "site": "pod_rear_low",
+  "amp_mm": -1.0,
+  "dV_mm3": -366.43980688390786
+ },
+ "pod_rear_top_m": {
+  "site": "pod_rear_top",
+  "amp_mm": -1.0,
+  "dV_mm3": -389.55158403647425
+ },
+ "null_pod_front": {
+  "site": "pod_front",
+  "amp_mm": 0.02,
+  "dV_mm3": 7.946952994305318
  }
 }

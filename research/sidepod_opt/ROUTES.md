@@ -101,6 +101,12 @@ external topology case was **not found** in their material (that is not proof it
       smoothed flow model, not the production schemes.
     - Either way, the ESI shape adjoint on `refA_coarse`'s own mesh is the second candidate; the
       current-scheme bumps serve it.
+- **2026-11-20 15:40, the fixed-point probe can't run with k-ω SST.** DAFoam v5.1.1's
+  `DASimpleFoam::runFPAdj` looks up `nuTilda` (Spalart-Allmaras only) and crashed. For k-ω SST,
+  Krylov is DAFoam's only adjoint. So the diagnosis moves to the flow: state A restarted with
+  first-order upwind U (k and ω were already upwind) for 3000 more iterations
+  (`gate/refA_coarse_up`). If it converges ≥ 4 orders with force oscillation ≪ 1 mN, Krylov is
+  re-run on it; the colouring depends only on the mesh, so the 15 min colouring is reused.
 
 ## Sources
 

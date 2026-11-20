@@ -25,7 +25,8 @@ import trimesh
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
-GROUND_MM = -0.15            # the road: 0.15 mm under z = 0, so the wheels (bottom at -0.3 mm) sink 0.15 mm
+SINK_MM = 0.15               # the road sits this far above the wheels' lowest point: wheels pressed 0.15 mm in
+GROUND_MM = 0.0              # faceted (Part 4 export) cars: wheels already sunk 0.3 mm below z = 0
 DOMAIN_MM = ((-771.0, 0.0, GROUND_MM), (2314.0, 192.0, 245.0))   # Part 2's half tunnel for this car
 
 
@@ -189,7 +190,21 @@ def build_exact(out: Path, spec=None, domain=DOMAIN_MM):
     solids = CI.read_step_solids(s.step)
     body = to_car_frame(CI.outer_solid(solids[s.body_solid]), s.x_nose_mm)
     wheel_s = {"wheelF": to_car_frame(solids["wheel_fl"], s.x_nose_mm), "wheelR": to_car_frame(solids["wheel_rl"], s.x_nose_mm)}
-    (x0, y0, z0), (x1, y1, z1) = domain
+    from OCP.Bnd import Bnd_Box
+    from OCP.BRepBndLib import BRepBndLib
+    zmin = []
+    for w in wheel_s.values():
+        b = Bnd_Box(); BRepBndLib.Add_s(w, b, False); zmin.append(b.CornerMin().Z())
+    # As Parts 2 and 4: the road is the track (z = 0), the body keeps its real height (1.5 mm gap), and
+    # only the wheels are lowered so they press SINK_MM into the road (a contact patch, not a sliver gap)
+    from OCP.BRepBuilderAPI import BRepBuilderAPI_Transform
+    from OCP.gp import gp_Trsf, gp_Vec
+    drop = min(zmin) + SINK_MM
+    tr = gp_Trsf(); tr.SetTranslation(gp_Vec(0, 0, -drop))
+    wheel_s = {k: BRepBuilderAPI_Transform(w, tr, True).Shape() for k, w in wheel_s.items()}
+    (x0, y0, _), (x1, y1, z1) = domain
+    z0 = 0.0
+    domain = ((x0, y0, z0), (x1, y1, z1))
     box = BRepPrimAPI_MakeBox(gp_Pnt(x0, y0, z0), gp_Pnt(x1, y1, z1)).Shape()
     cut = BRepAlgoAPI_Cut()
     args, tools = List_TopoDS_Shape(), List_TopoDS_Shape()
@@ -212,7 +227,7 @@ def build_exact(out: Path, spec=None, domain=DOMAIN_MM):
     while ex.More():
         nf += 1; ex.Next()
     return {"step": str(out), "removed_mm3": removed, "expected_mm3": expect, "removed_share": removed / expect,
-            "faces_total": nf, "named": counts, "ground_mm": z0, "secs": round(time.time() - t0)}
+            "faces_total": nf, "named": counts, "ground_mm": z0, "wheels_lowered_mm": drop, "wheel_sink_mm": SINK_MM, "secs": round(time.time() - t0)}
 
 
 def main():

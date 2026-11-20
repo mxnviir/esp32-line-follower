@@ -18,6 +18,20 @@
    "sum_minus_2zero_mN (curvature + zero offset)": 1.1650102352110114
   },
   {
+   "site": "pod_front_low",
+   "amp_mm": 1.0,
+   "plus": "pod_front_low",
+   "minus": "pod_front_low_m",
+   "half_diff_measured_mN": -1.12614800685445,
+   "half_diff_predicted_mN": 0.09315106679766168,
+   "half_diff_predicted_matched_mN": -0.013024409495668963,
+   "half_diff_stderr_mN": 0.16609539717931548,
+   "stderr_assumed_0.2mN_for": [
+    "pod_front_low"
+   ],
+   "sum_minus_2zero_mN (curvature + zero offset)": 1.0856662261627958
+  },
+  {
    "site": "pod_rear",
    "amp_mm": 1.0,
    "plus": "pod_rear",
@@ -42,6 +56,17 @@
    "predicted_matched_mN": -1.5206039249619863,
    "stderr_mN": 0.5508358017541092,
    "dV_mm3": 743.1953272058347,
+   "usable": true
+  },
+  {
+   "bump": "grad_p075",
+   "site": "adjoint_gradient",
+   "amp_mm": 0.75,
+   "measured_mN": -0.5337786992032356,
+   "predicted_mN": 0.837764145030381,
+   "predicted_matched_mN": 0.7603018530505747,
+   "stderr_mN": 0.1991298379141324,
+   "dV_mm3": -371.5976203957247,
    "usable": true
   },
   {
@@ -89,6 +114,17 @@
    "usable": true
   },
   {
+   "bump": "pod_front_low_m",
+   "site": "pod_front_low",
+   "amp_mm": -1.0,
+   "measured_mN": 1.6689811199358529,
+   "predicted_mN": -0.09315110382981082,
+   "predicted_matched_mN": 0.013024336542056389,
+   "stderr_mN": 0.2652371087472834,
+   "dV_mm3": -396.30674980093033,
+   "usable": true
+  },
+  {
    "bump": "pod_rear",
    "site": "pod_rear",
    "amp_mm": 1.0,
@@ -112,15 +148,15 @@
   }
  ],
  "map": {
-  "pearson_r": -0.5649415291251794,
-  "signs": "0/6",
-  "slope_measured_per_predicted": -0.6049274764855544,
+  "pearson_r": -0.5398065694409669,
+  "signs": "0/8",
+  "slope_measured_per_predicted": -0.6321799233151408,
   "passed_part3_marks": false
  },
  "matched_map": {
-  "pearson_r": -0.5038723432331252,
-  "signs": "3/6",
-  "slope_measured_per_predicted": -0.5934908263413889,
+  "pearson_r": -0.4686442143759443,
+  "signs": "4/8",
+  "slope_measured_per_predicted": -0.6013123717808404,
   "passed_part3_marks": false
  },
  "note": "signs and slope use the zero run (checked by the null run); the pairs do not. map = first adjoint (3 wall layers, 1000-it primal: NOT the bumps' mesh); matched_map = adjoint on the bumps' own mesh and primal"

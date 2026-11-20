@@ -1,5 +1,7 @@
 # sidepod_opt: organic sidepod search, production version
 
+**Current plan and status of the free-form (topology) search: [ROUTES.md](ROUTES.md).**
+
 Finds the fastest **sidepod** for a fixed car: you give the STEP and the region, it searches
 organic shapes, makes each one exactly as the CNC would, times it with real CFD, and scores it on
 **race time** with Part 2's race model. Nothing outside the region is ever changed.

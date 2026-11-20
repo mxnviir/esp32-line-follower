@@ -248,6 +248,8 @@ def cmd_gradvariant(name, amp_mm):
 
 
 def cmd_bump(k, n_sub):
+    if k == "adjoint_matched":          # lets the lane queue (gate/queue.txt) run the matched adjoint
+        return cmd_adjoint(n_sub, matched=True)
     ref = ref_dir()
     folder = G / f"bump_{k}"
     half, health, secs = solve(folder, n_sub, ITERS, extra={"morph_from": ref, "warm_from": ref}, keep=True)
@@ -274,20 +276,34 @@ def cmd_reference_repeat(n_sub):
     print(json.dumps(d, default=float), flush=True)
 
 
-def cmd_adjoint(n_sub):
+def cmd_adjoint(n_sub, matched=False):
+    """matched: the adjoint on the SAME mesh and primal as the bumps (SW.SEARCH: no wall layers;
+    primal as long as state A's), run folder kept in gate/adjoint_matched. The first adjoint
+    (tag "") ran with OpenFOAM's default 3 wall layers and a 1000-iteration primal: a different
+    flow from the one every bump measures."""
     import openfoam_adjoint as OA
     import stopwatch as SW
     import trimesh
+    tag = "_matched" if matched else ""
     body = SW.body_stl(ORIG / "car_half.stl", ORIG / "_body_half.stl")
+    more = dict(layer_overrides=SW.SEARCH["layer_overrides"], primal_iters=ITERS_BASE, keep_run_dir=True) if matched else {}
     cfg = OA.AdjointRunConfig(resolution=RES, n_subdomains=n_sub, extra_surfaces=SW.extra_surfaces(ORIG),
-                              domain_reference_bounds=DOMAIN)
+                              domain_reference_bounds=DOMAIN, **more)
     t = time.time()
-    s = OA.invoke_adjoint(str(body), str(P2 / "cfd_case_template"), cfg)      # kinematic dD_half/dn per vertex
+    s = OA.invoke_adjoint(str(body), str(P2 / "cfd_case_template"), cfg)      # kinematic dD_half/dn per corner
     v = trimesh.load(body).vertices
-    np.save(R / "adjoint_sens.npy", np.asarray(s)); np.save(R / "adjoint_verts.npy", v)
-    (R / "adjoint.json").write_text(json.dumps({"wall_s": round(time.time() - t, 1), "n": int(len(s)),
-                                                "rho": 1.225}, indent=1))
-    print("adjoint done", len(s), round(time.time() - t), "s", flush=True)
+    np.save(R / f"adjoint_sens{tag}.npy", np.asarray(s)); np.save(R / f"adjoint_verts{tag}.npy", v)
+    info = {"wall_s": round(time.time() - t, 1), "n": int(len(s)), "rho": 1.225, **{k: v_ for k, v_ in more.items()}}
+    if matched:
+        runs = sorted((P2 / "cfd_case_template" / "adjoint_runs").iterdir(), key=lambda q: q.stat().st_mtime)
+        keep = G / "adjoint_matched"
+        if keep.exists():
+            shutil.rmtree(keep)
+        shutil.copytree(runs[-1], keep, ignore=shutil.ignore_patterns("processor*"))
+        info["run_dir_kept"] = str(keep)
+        save_forces(str(keep), "adjoint_matched_primal")
+    (R / f"adjoint{tag}.json").write_text(json.dumps(info, indent=1, default=str))
+    print("adjoint done", tag, len(s), round(time.time() - t), "s", flush=True)
 
 
 def save_forces(run, name):
@@ -308,27 +324,27 @@ def latest_run_of(pid):
     return str(runs[-1]) if runs else None
 
 
-def adjoint_on_base(base):
+def adjoint_on_base(base, tag=""):
     """The adjoint as saved is one value per STL triangle CORNER, each the value of the nearest
     CFD surface point (openfoam_adjoint.map_sensitivity_to_stl_vertices): kinematic dD_half/dn per
     unit AREA (ESI default, includeSurfaceArea false, as Part 3's known-answer check reads it).
     Per vertex: the mean of its corners (g) and its area (1/3 of its faces). On another machine
     whose re-meshed original differs, g is taken from the nearest vertex of the adjoint's mesh
     (adjoint_g.npy + adjoint_verts.npy)."""
-    s = np.load(ADJ / "adjoint_sens.npy")
+    s = np.load(ADJ / f"adjoint_sens{tag}.npy")
     vid = base.faces.reshape(-1)
     area = np.bincount(vid, weights=np.repeat(base.area_faces / 3, 3), minlength=len(base.vertices))
-    if len(base.faces) * 3 == len(s) and np.allclose(base.vertices, np.load(ADJ / "adjoint_verts.npy")):
+    if len(base.faces) * 3 == len(s) and np.allclose(base.vertices, np.load(ADJ / f"adjoint_verts{tag}.npy")):
         g = np.bincount(vid, weights=s, minlength=len(base.vertices)) / np.bincount(vid, minlength=len(base.vertices))
-        if not (ADJ / "adjoint_g.npy").exists():
-            np.save(ADJ / "adjoint_g.npy", g)
+        if not (ADJ / f"adjoint_g{tag}.npy").exists():
+            np.save(ADJ / f"adjoint_g{tag}.npy", g)
         return g, area
     from scipy.spatial import cKDTree
-    V = np.load(ADJ / "adjoint_verts.npy")
+    V = np.load(ADJ / f"adjoint_verts{tag}.npy")
     d, i = cKDTree(V).query(base.vertices)
     if np.median(d) > 2e-4:
         raise SystemExit(f"this original differs from the adjoint's (median {np.median(d)*1e3:.2f} mm)")
-    return np.load(ADJ / "adjoint_g.npy")[i], area
+    return np.load(ADJ / f"adjoint_g{tag}.npy")[i], area
 
 
 def run_stderr_mN(name, rec_):
@@ -363,6 +379,7 @@ def cmd_judge():
     meta = json.loads((R / "bumps.json").read_text())
     base = trimesh.load(ORIG / "car_half.stl")
     g, area = adjoint_on_base(base)
+    gm = adjoint_on_base(base, "_matched")[0] if (ADJ / "adjoint_sens_matched.npy").exists() else None
     rows, by = [], {}
     for p in sorted(R.glob("bump_*.json")):
         k = p.stem[5:]
@@ -371,6 +388,7 @@ def cmd_judge():
         site = meta.get(k, {}).get("site", k); amp = meta.get(k, {}).get("amp_mm", 1.0)
         r = {"bump": k, "site": site, "amp_mm": amp, "measured_mN": (b["D20_half_N"] - zero) * 1e3,
              "predicted_mN": float(1.225 * (g * dn * area).sum()) * 1e3,
+             **({"predicted_matched_mN": float(1.225 * (gm * dn * area).sum()) * 1e3} if gm is not None else {}),
              "stderr_mN": run_stderr_mN(f"bump_{k}", b), "dV_mm3": float((dn * area).sum() * 1e9),
              "usable": bool(not b["morph_fallback"] and b["converged"]),
              "_D": b["D20_half_N"] * 1e3}
@@ -393,7 +411,10 @@ def cmd_judge():
                 pairs.append({"site": site, "amp_mm": rp["amp_mm"], "plus": rp["bump"], "minus": rm["bump"],
                               "half_diff_measured_mN": (rp["_D"] - rm["_D"]) / 2,
                               "half_diff_predicted_mN": (rp["predicted_mN"] - rm["predicted_mN"]) / 2,
-                              "half_diff_stderr_mN": (0.5 * np.hypot(*se)) if None not in se else None,
+                              **({"half_diff_predicted_matched_mN": (rp["predicted_matched_mN"] - rm["predicted_matched_mN"]) / 2}
+                                 if gm is not None else {}),
+                              "half_diff_stderr_mN": 0.5 * np.hypot(*[x if x is not None else 0.2 for x in se]),
+                              "stderr_assumed_0.2mN_for": [x["bump"] for x in (rp, rm) if x["stderr_mN"] is None],
                               "sum_minus_2zero_mN (curvature + zero offset)": rp["measured_mN"] + rm["measured_mN"]})
     out["pairs"] = pairs
     for r in rows:
@@ -401,12 +422,18 @@ def cmd_judge():
     out["rows"] = rows
     use = [r for r in rows if r["usable"] and r not in nulls]
     if len(use) >= 3:
-        m = np.array([r["measured_mN"] for r in use]); pr = np.array([r["predicted_mN"] for r in use])
-        rr = float(np.corrcoef(m, pr)[0, 1]); sg = (np.sign(m) == np.sign(pr))
-        out.update(pearson_r=rr, signs=f"{int(sg.sum())}/{len(use)}",
-                   slope_measured_per_predicted=float((m @ pr) / (pr @ pr)),
-                   passed_part3_marks=bool(rr >= 0.9 and sg.mean() >= 0.9),
-                   note="signs and slope depend on the single zero run; the pairs do not")
+        m = np.array([r["measured_mN"] for r in use])
+        for key, lab in (("predicted_mN", ""), ("predicted_matched_mN", "matched_")):
+            if key not in use[0]:
+                continue
+            pr = np.array([r[key] for r in use])
+            rr = float(np.corrcoef(m, pr)[0, 1]); sg = (np.sign(m) == np.sign(pr))
+            out[lab + "map"] = dict(pearson_r=rr, signs=f"{int(sg.sum())}/{len(use)}",
+                                    slope_measured_per_predicted=float((m @ pr) / (pr @ pr)),
+                                    passed_part3_marks=bool(rr >= 0.9 and sg.mean() >= 0.9))
+        out["note"] = ("signs and slope use the zero run (checked by the null run); the pairs do not. "
+                       "map = first adjoint (3 wall layers, 1000-it primal: NOT the bumps' mesh); "
+                       "matched_map = adjoint on the bumps' own mesh and primal")
     (R / "judge.json").write_text(json.dumps(out, indent=1))
     print(json.dumps(out, indent=1))
 
@@ -426,6 +453,8 @@ if __name__ == "__main__":
         cmd_reference_repeat(npar(2))
     elif c == "adjoint":
         cmd_adjoint(npar(2))
+    elif c == "adjoint_matched":
+        cmd_adjoint(npar(2), matched=True)
     elif c == "gradvariant":
         cmd_gradvariant(sys.argv[2], sys.argv[3])
     elif c == "variant":

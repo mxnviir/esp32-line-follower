@@ -4,8 +4,40 @@
  "null_minus_zero_mN (second zero sample)": {
   "null_pod_front": -0.04944026803688217
  },
- "pairs": [],
+ "pairs": [
+  {
+   "site": "adjoint_gradient",
+   "amp_mm": 1.5,
+   "plus": "grad_p15",
+   "minus": "grad_m15",
+   "half_diff_measured_mN": -0.9974434256086369,
+   "half_diff_predicted_mN": 1.675528364125059,
+   "half_diff_stderr_mN": 0.2930282021528999,
+   "stderr_assumed_0.2mN_for": [],
+   "sum_minus_2zero_mN (curvature + zero offset)": 1.1650102352110114
+  }
+ ],
  "rows": [
+  {
+   "bump": "grad_m15",
+   "site": "adjoint_gradient",
+   "amp_mm": -1.5,
+   "measured_mN": 1.579948543214138,
+   "predicted_mN": -1.675528401157208,
+   "stderr_mN": 0.5508358017541092,
+   "dV_mm3": 743.1953272058347,
+   "usable": true
+  },
+  {
+   "bump": "grad_p15",
+   "site": "adjoint_gradient",
+   "amp_mm": 1.5,
+   "measured_mN": -0.4149383080031266,
+   "predicted_mN": 1.6755283270929096,
+   "stderr_mN": 0.20010504374890384,
+   "dV_mm3": -743.1952695962445,
+   "usable": true
+  },
   {
    "bump": "nose_top",
    "site": "nose_top",
@@ -47,9 +79,11 @@
    "usable": true
   }
  ],
- "pearson_r": 0.9176628786882906,
- "signs": "0/3",
- "slope_measured_per_predicted": -3.6749988435892273,
- "passed_part3_marks": false,
- "note": "signs and slope depend on the single zero run; the pairs do not"
+ "map": {
+  "pearson_r": -0.6126808045623183,
+  "signs": "0/5",
+  "slope_measured_per_predicted": -0.6043466328799945,
+  "passed_part3_marks": false
+ },
+ "note": "signs and slope use the zero run (checked by the null run); the pairs do not. map = first adjoint (3 wall layers, 1000-it primal: NOT the bumps' mesh); matched_map = adjoint on the bumps' own mesh and primal"
 }

@@ -19,12 +19,13 @@ STATE=${STATE:-$HOME/.sidepod_gate_codespace}
 
 case "$1" in
 start)
+  : "${GATE_JOBS:?set GATE_JOBS first (see gate_cs_queue.sh); nothing was created}"
   CS=$(gh codespace create -R "$REPO" -b "$BRANCH" -m standardLinux32gb --idle-timeout 240m \
          --retention-period 24h -d "sidepod adjoint gate")
   echo "$CS" > "$STATE"; echo "codespace: $CS"
-  # default: the decisive set, all on the codespace's own mesh (pairs need both halves on one machine):
-  # the gradient pair at two sizes, the pod_rear and pod_front_low pairs, and a noise null
-  JOBS=${GATE_JOBS:-"grad_p15:grad:1.5 grad_m15:grad:-1.5 null_pod_front:pod_front:0.02 pod_rear: pod_rear_m:pod_rear:-1 grad_p3:grad:3 pod_front_low: pod_front_low_m:pod_front_low:-1 grad_m3:grad:-3"}
+  # no default job list: what is worth paid hours depends on the matched-adjoint result
+  # (gate_results/judge.json). Pass GATE_JOBS explicitly, e.g. GATE_JOBS="adjoint_matched: grad_p15:grad:1.5 grad_m15:grad:-1.5"
+  JOBS=${GATE_JOBS:?set GATE_JOBS (see gate_cs_queue.sh)}
   gh codespace ssh -c "$CS" -- "echo 'GATE_JOBS=\"$JOBS\"' > /tmp/jobs.env"
   gh codespace ssh -c "$CS" -- 'cat > /tmp/run.sh <<"EOF"
 #!/bin/bash

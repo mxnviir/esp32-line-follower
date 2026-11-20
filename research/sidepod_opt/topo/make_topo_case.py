@@ -73,6 +73,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--res", default="coarse")
     ap.add_argument("--region_level", type=int, default=4, help="snappy level inside the design region")
+    ap.add_argument("--pad_mm", type=float, default=2.0, help="refinement box margin around the region")
     ap.add_argument("--cycles", type=int, default=60)
     ap.add_argument("--np", type=int, default=4)
     ap.add_argument("--iters", type=int, default=300, help="primal and adjoint iterations per cycle")
@@ -95,7 +96,7 @@ def main():
     OA.build_adjoint_case(str(out), str(body), cfg)
 
     # --- a refinement box over the design region, so the free cells are fine enough to grow detail
-    (bx0, by0, bz0), (bx1, by1, bz1) = region_box_car_frame(car)
+    (bx0, by0, bz0), (bx1, by1, bz1) = region_box_car_frame(car, pad_m=a.pad_mm * 1e-3)
     sh = (out / "system" / "snappyHexMeshDict").read_text()
     sh = sh.replace("\n    underbody\n", f"\n    design\n    {{\n        type searchableBox;\n        min  ({bx0} {by0} {bz0});\n"
                     f"        max  ({bx1} {by1} {bz1});\n    }}\n\n    underbody\n", 1)

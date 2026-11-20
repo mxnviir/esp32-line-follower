@@ -122,6 +122,12 @@ external topology case was **not found** in their material (that is not proof it
   If the ranking disagrees, try a middle scheme (e.g. `limitedLinearV 1`, a TVD scheme) that may
   converge with less smearing. DAFoam Krylov launched on this state (`gate/dafoam_coarseA_up`);
   the colouring is recomputed (`run_docker.sh` deletes it before renumbering).
+- **2026-11-20 16:08, DAFoam Krylov on the steady state converges (slowly).** Primal 228.722 mN
+  = OpenFOAM's 228.72 (the production state was 1.1 mN off). Colouring 944 s. GMRES residual
+  2.75e-2 → 1.52e-2 (100) → 4.0e-3 (200) → 3.3e-3 (300) → 1.47e-3 (400), where the unsteady state
+  stalled at 1.87e-2. **The stall was the unsteady primal**, as diagnosed. The 1e-6 relative
+  target is out of reach in 2000 iterations at this rate; whether the partly converged gradient is
+  good enough is exactly what the bump check decides.
 
 ## Sources
 

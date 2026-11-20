@@ -12,9 +12,24 @@
    "minus": "grad_m15",
    "half_diff_measured_mN": -0.9974434256086369,
    "half_diff_predicted_mN": 1.675528364125059,
+   "half_diff_predicted_matched_mN": 1.5206038520083736,
    "half_diff_stderr_mN": 0.2930282021528999,
    "stderr_assumed_0.2mN_for": [],
    "sum_minus_2zero_mN (curvature + zero offset)": 1.1650102352110114
+  },
+  {
+   "site": "pod_rear",
+   "amp_mm": 1.0,
+   "plus": "pod_rear",
+   "minus": "pod_rear_m",
+   "half_diff_measured_mN": -1.2696180020493273,
+   "half_diff_predicted_mN": 0.003498451952567141,
+   "half_diff_predicted_matched_mN": -0.10424065611254522,
+   "half_diff_stderr_mN": 0.18126674551289101,
+   "stderr_assumed_0.2mN_for": [
+    "pod_rear"
+   ],
+   "sum_minus_2zero_mN (curvature + zero offset)": -0.6650973909061442
   }
  ],
  "rows": [
@@ -24,6 +39,7 @@
    "amp_mm": -1.5,
    "measured_mN": 1.579948543214138,
    "predicted_mN": -1.675528401157208,
+   "predicted_matched_mN": -1.5206039249619863,
    "stderr_mN": 0.5508358017541092,
    "dV_mm3": 743.1953272058347,
    "usable": true
@@ -34,6 +50,7 @@
    "amp_mm": 1.5,
    "measured_mN": -0.4149383080031266,
    "predicted_mN": 1.6755283270929096,
+   "predicted_matched_mN": 1.520603779054761,
    "stderr_mN": 0.20010504374890384,
    "dV_mm3": -743.1952695962445,
    "usable": true
@@ -44,6 +61,7 @@
    "amp_mm": 1.0,
    "measured_mN": -0.009536947193522494,
    "predicted_mN": 0.08860692436568801,
+   "predicted_matched_mN": 0.08593546824860956,
    "stderr_mN": 0.2083219066951557,
    "dV_mm3": 242.30392039429867,
    "usable": true
@@ -54,6 +72,7 @@
    "amp_mm": 0.02,
    "measured_mN": -0.04944026803688217,
    "predicted_mN": 0.006146886245112589,
+   "predicted_matched_mN": 0.0009347448824074592,
    "stderr_mN": 0.19966157464396608,
    "dV_mm3": 8.102903680302513,
    "usable": true
@@ -64,6 +83,7 @@
    "amp_mm": 1.0,
    "measured_mN": -0.583314893773057,
    "predicted_mN": 0.09315102976551254,
+   "predicted_matched_mN": -0.013024482449281538,
    "stderr_mN": null,
    "dV_mm3": 396.3068074105207,
    "usable": true
@@ -74,15 +94,33 @@
    "amp_mm": 1.0,
    "measured_mN": -1.6021666975024051,
    "predicted_mN": 0.0034984149204179945,
+   "predicted_matched_mN": -0.10424072906615782,
    "stderr_mN": null,
    "dV_mm3": 378.9506425587469,
+   "usable": true
+  },
+  {
+   "bump": "pod_rear_m",
+   "site": "pod_rear",
+   "amp_mm": -1.0,
+   "measured_mN": 0.937069306596261,
+   "predicted_mN": -0.0034984889847162874,
+   "predicted_matched_mN": 0.10424058315893263,
+   "stderr_mN": 0.30237482057099396,
+   "dV_mm3": -378.9505849491566,
    "usable": true
   }
  ],
  "map": {
-  "pearson_r": -0.6126808045623183,
-  "signs": "0/5",
-  "slope_measured_per_predicted": -0.6043466328799945,
+  "pearson_r": -0.5649415291251794,
+  "signs": "0/6",
+  "slope_measured_per_predicted": -0.6049274764855544,
+  "passed_part3_marks": false
+ },
+ "matched_map": {
+  "pearson_r": -0.5038723432331252,
+  "signs": "3/6",
+  "slope_measured_per_predicted": -0.5934908263413889,
   "passed_part3_marks": false
  },
  "note": "signs and slope use the zero run (checked by the null run); the pairs do not. map = first adjoint (3 wall layers, 1000-it primal: NOT the bumps' mesh); matched_map = adjoint on the bumps' own mesh and primal"

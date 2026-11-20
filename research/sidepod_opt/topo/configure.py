@@ -70,7 +70,9 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("base"); ap.add_argument("out")
     ap.add_argument("--mode", default="optimise", choices=["optimise", "fixed_empty", "fixed_original"])
-    ap.add_argument("--start", default="empty", choices=["empty", "half"])
+    ap.add_argument("--start", default="empty", choices=["empty", "half", "original"])
+    ap.add_argument("--cap_mm3", type=float, default=None, help="half-car solid cap, mm3 (default: lead budget x margin)")
+    ap.add_argument("--b", default=None, help="constant projection sharpness (default: ramp 2 -> 40)")
     ap.add_argument("--cycles", type=int, default=60)
     ap.add_argument("--radius", type=float, default=0.0025, help="filter radius, m")
     ap.add_argument("--mill_margin", type=float, default=0.85, help="share of the lead budget the porous design may use")
@@ -105,14 +107,14 @@ def main():
     for f in ("C", "V"):
         (out / "0" / f).unlink(missing_ok=True)
     v_total = float(V.sum()); v_design = float(V[isd].sum()); v_orig = float(V[orig].sum())
-    cap_mm3_half = 0.5 * FREE_FOAM_MM3_WHOLE * a.mill_margin
+    cap_mm3_half = a.cap_mm3 if a.cap_mm3 else 0.5 * FREE_FOAM_MM3_WHOLE * a.mill_margin
     cap_frac = cap_mm3_half * 1e-9 / v_total
 
     # --- initial design
     alpha = np.zeros(len(C))
     if a.mode == "optimise" and a.start == "half":
         alpha[isd] = 0.5
-    if a.mode == "fixed_original":
+    if a.mode == "fixed_original" or (a.mode == "optimise" and a.start == "original"):
         alpha[orig] = 1.0
     write_scalar_field(out / "0" / "alpha", "alpha", alpha, patches_of(out))
 
@@ -145,7 +147,9 @@ def main():
     od = re.sub(r"meanRadiusMult \d+;", f"radius         {a.radius};", od, count=1)
     # sharpness ramp: a soft projection first (pure-fluid cells keep a gradient), sharp at the end
     n = max(a.cycles, 1)
-    if a.mode == "optimise" and n >= 10:
+    if a.b is not None:
+        bspec = a.b
+    elif a.mode == "optimise" and n >= 10:
         bspec = "table ((0 2) (%d 2) (%d 8) (%d 40) (%d 40))" % (int(0.3 * n), int(0.6 * n), int(0.85 * n), n + 1000)
     else:
         bspec = "40"                            # fixed designs: every cell is pinned; a crisp projection

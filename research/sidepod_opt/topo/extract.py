@@ -74,6 +74,7 @@ def main():
     ap.add_argument("--field", default="beta")
     ap.add_argument("--cfd", action="store_true")
     ap.add_argument("--res", default="coarse")
+    ap.add_argument("--smooth_mm", type=float, default=1.0)
     a = ap.parse_args()
     case = Path(a.case).resolve()
     t = latest_time(case) if a.time == "latest" else a.time
@@ -82,7 +83,7 @@ def main():
                        cwd=case, check=True, capture_output=True)
     C = foam_vector_field(case / "0" / "C")
     beta = foam_scalar_field(case / t / a.field)
-    car = Car()
+    car = Car(h=1.0)                                       # the campaign grid (config h_mm 1.0)
     s = car.s
     # voxel centres of the region -> CFD frame -> nearest cell's beta
     idx = np.argwhere(car.region)
@@ -90,8 +91,12 @@ def main():
     P = np.c_[(s.x_nose_mm - X) * 1e-3, np.abs(Y) * 1e-3, Z * 1e-3]
     d, i = cKDTree(C).query(P)
     vb = beta[i]
-    field = np.full(car.body0.shape, -1.0)
-    field[idx[:, 0], idx[:, 1], idx[:, 2]] = vb - 0.5          # solid where beta > 0.5
+    from scipy import ndimage
+    grid = np.zeros(car.body0.shape)
+    grid[idx[:, 0], idx[:, 1], idx[:, 2]] = vb
+    if a.smooth_mm > 0:                                        # nearest-cell sampling leaves staircase slivers
+        grid = ndimage.gaussian_filter(grid, a.smooth_mm / car.h)
+    field = np.where(car.region, grid - 0.5, -1.0)            # solid where (smoothed) beta > 0.5
     b = car.build(field)
     out = case / f"car_t{t}"
     rep = {"time": t, "region_voxels": int(len(idx)), "solid_voxels_beta>0.5": int((vb > 0.5).sum()),

@@ -338,6 +338,20 @@ def _adjoint_to_grid(car, run, rdir, folder, work, n_proc):
     return {**{k: v for k, v in A.items() if k not in ("Xs", "dD_dXs")}, **ginfo}
 
 
+MAX_STALE = 2
+
+
+def _use_stale_gradient(run: Path, st: dict) -> bool:
+    """An adjoint failed on the accepted design (e.g. GMRES stalled with the memory-limited
+    preconditioner). Keep stepping along the last good gradient: it belongs to a design at most one
+    step away, and every step is still judged by real CFD. At most MAX_STALE accepted designs in a row."""
+    n = int(st.get("stale_grad", 0)) + 1
+    if n > MAX_STALE or not (run / "grad_current.npz").exists():
+        return False
+    st.update(stale_grad=n, grad_ready=True)
+    return True
+
+
 def cmd_run(a):
     global DOMAIN
     import gate
@@ -360,9 +374,16 @@ def cmd_run(a):
             raise RuntimeError("accepted design has no gradient and its CFD run is gone; re-init this seed")
         d = run / "adjoint_retry"
         shutil.rmtree(d, ignore_errors=True); d.mkdir()
-        info = _adjoint_to_grid(car, run, st["run_current"], run / "best_car", d, cfg["np"])
-        st["grad_ready"] = True; save()
-        log(run, {"it": st["it"], "step_mm": st["step_mm"], "adjoint_retry": True, **info})
+        try:
+            info = _adjoint_to_grid(car, run, st["run_current"], run / "best_car", d, cfg["np"])
+            st.update(grad_ready=True, stale_grad=0); save()
+            log(run, {"it": st["it"], "step_mm": st["step_mm"], "adjoint_retry": True, **info})
+        except Exception as e:
+            if not _use_stale_gradient(run, st):
+                raise
+            save()
+            log(run, {"it": st["it"], "step_mm": st["step_mm"], "adjoint_retry": True, "adjoint_error": repr(e)[:300],
+                      "stale_gradient": st["stale_grad"]})
     done = 0
     while done < a.iters and (not t_end or time.time() < t_end):
         it = st["it"]
@@ -454,12 +475,15 @@ def cmd_run(a):
                 shutil.copytree(folder, run / "best_car", dirs_exist_ok=True)
                 try:
                     rec.update(_adjoint_to_grid(car, run, rdir, folder, d, cfg["np"]))
-                    st["grad_ready"] = True
-                except Exception as e:                              # next start redoes the adjoint
+                    st.update(grad_ready=True, stale_grad=0)
+                except Exception as e:
                     rec.update(adjoint_error=repr(e)[:300])
-                    st["it"] = it + 1                               # keep it_NNN (its car is best_car)
-                    log(run, rec); save()
-                    raise
+                    if _use_stale_gradient(run, st):                # step along the last good gradient
+                        rec.update(stale_gradient=st["stale_grad"])
+                    else:                                           # next start redoes the adjoint
+                        st["it"] = it + 1                           # keep it_NNN (its car is best_car)
+                        log(run, rec); save()
+                        raise
         st["it"] = it + 1
         log(run, rec)
         save()

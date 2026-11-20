@@ -281,6 +281,23 @@ external topology case was **not found** in their material (that is not proof it
   current design on a fresh mesh, make it the reference (its gradient stays valid, same design),
   and morph the candidate from it, so both numbers share a mesh. Before this, every fallback was
   a rejection with the step halved, so repeated fallbacks would have shrunk the steps to nothing.
+- **2026-11-20 21:55, step 4 accepted; then its adjoint stalled; fallback added.**
+  - Step 4 (0.75 mm): **427.09 mN (−1.81)**, morphed mesh (skewness 2.9, Mesh OK). Drift of the CFD
+    surface from the design: mean 0.018 mm, p99 0.16 mm. Total so far **−22.15 mN (−4.9 %)**.
+  - Its DAFoam adjoint stalled: GMRES 2.6e-2 → 9.0e-3 by iteration 200, then flat to 2000 (reason −3,
+    "Adjoint solution failed"). Iterations 0, 1 and 3 converged with the same settings. The flow is
+    steady (OpenFOAM and DAFoam agree to 0.01 mN; residual p 7e-6) and the mesh passes checkMesh,
+    so this design's linear system is harder for the memory-limited preconditioner (fill 0).
+  - The wrapper's identical retry was stopped by hand: same inputs, same stall, 40 min each.
+  - **Fallback (`_use_stale_gradient`):** when an adjoint fails, step along the last good gradient
+    (here it 3's: a design ≤ 0.75 mm away), at most 2 accepted designs in a row. Every step is
+    still judged by real CFD. Run restarted 21:55 on it 3's gradient.
+  - If stalls recur, the fixes (memory permitting): GMRES restart 200 → 400, or preconditioner
+    fill 0 → 1 on a bigger machine.
+- Render of the changes so far: `runs/cloud_original/shape_change.png`. The outer front corner is
+  chamfered, the inboard leading face filled, the rear lower outboard corner tapered towards the
+  rear wheel (boat-tail), and a scoop cut at x ≈ 145–155 mm from the nose; mid-width sides bulge a
+  few tenths, and the outermost flank is pulled in.
 
 ## Sources
 

@@ -24,7 +24,7 @@ ball-end cutter, set-ups from top, bottom, left and right); wheels, supports, no
 printed. The car is scored on **race time**. Rules come from the STEM Racing regulations (not in
 the repo; rule numbers like T3.7, T4.2, T7.9 refer to them).
 
-**The repository** (`mxnviir/esp32-line-follower`, the name is historical) holds the team's car
+**The repository** (`mxnviir/stem-racing-paper`, formerly `esp32-line-follower`; codespace folder `/workspaces/stem-racing-paper`) holds the team's car
 optimiser. The five parts must stay side by side:
 
 | Folder | What it does |

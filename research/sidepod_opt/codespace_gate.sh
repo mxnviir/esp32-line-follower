@@ -13,7 +13,7 @@
 # bumps 3 at a time; the adjoint is the one already in gate_results/ (not re-run). Results go to
 # gate_results_cs/ and are committed and pushed after every job, so `fetch` is only a backup.
 set -e
-REPO=${REPO:-mxnviir/esp32-line-follower}
+REPO=${REPO:-mxnviir/stem-racing-paper}
 BRANCH=${BRANCH:-ccr-a4f3e46d-23atrh}
 STATE=${STATE:-$HOME/.sidepod_gate_codespace}
 
@@ -32,7 +32,7 @@ start)
 set -x
 exec > /workspaces/gate_job.log 2>&1
 . /tmp/jobs.env
-cd /workspaces/esp32-line-follower
+cd /workspaces/stem-racing-paper
 sudo apt-get update -q && sudo apt-get install -y -q libopengl0 libglu1-mesa libegl1 libgl1 libgomp1 libxkbcommon0
 curl -s https://dl.openfoam.com/add-debian-repo.sh | sudo bash
 sudo apt-get install -y -q openfoam2412-default
@@ -50,12 +50,12 @@ chmod +x /tmp/run.sh; setsid nohup /tmp/run.sh >/dev/null 2>&1 </dev/null &'
 check)
   CS=$(cat "$STATE")
   gh codespace ssh -c "$CS" -- 'grep -E "START_RUN|EXIT" /workspaces/gate_job.log; tail -2 /workspaces/gate_job.log; \
-     ls /workspaces/esp32-line-follower/research/sidepod_opt/gate_results_cs/'
+     ls /workspaces/stem-racing-paper/research/sidepod_opt/gate_results_cs/'
   ;;
 fetch)
   CS=$(cat "$STATE")
   mkdir -p gate_results_codespace
-  gh codespace cp -c "$CS" -e -r 'remote:/workspaces/esp32-line-follower/research/sidepod_opt/gate_results_cs' ./gate_results_codespace/
+  gh codespace cp -c "$CS" -e -r 'remote:/workspaces/stem-racing-paper/research/sidepod_opt/gate_results_cs' ./gate_results_codespace/
   ;;
 delete)
   gh codespace delete -c "$(cat "$STATE")" -f && rm -f "$STATE"

@@ -182,6 +182,21 @@ def cmd_run(a):
     car = load_car()
     f_cur = np.load(run / "current.npz")["f"]
     t_end = time.time() + a.hours * 3600 if a.hours else None
+    # an accepted design whose adjoint failed (crash, OOM): redo the adjoint before any step, so we
+    # never step along a stale gradient (or a missing one). Old state files have no flag: trusted.
+    if st["D_current"] is not None and not st.get("grad_ready", True):
+        if not (st["run_current"] and Path(st["run_current"]).exists()):
+            raise RuntimeError("accepted design has no gradient and its CFD run is gone; re-init this seed")
+        d = run / "adjoint_retry"
+        shutil.rmtree(d, ignore_errors=True); d.mkdir()
+        A = adjoint(st["run_current"], d / "dafoam_case", cfg["np"], {})
+        g, ginfo = grid_gradient(car, run / "best_car", A["Xs"], A["dD_dXs"], cfg["sigma_mm"])
+        np.savez_compressed(run / "grad_current.npz", g=g)
+        shutil.rmtree(d / "dafoam_case", ignore_errors=True)
+        st["grad_ready"] = True
+        (run / "state.json").write_text(json.dumps(st, indent=1, default=str))
+        log(run, {"it": st["it"], "step_mm": st["step_mm"], "adjoint_retry": True,
+                  **{k: v for k, v in A.items() if k not in ("Xs", "dD_dXs")}, **ginfo})
     done = 0
     while done < a.iters and (not t_end or time.time() < t_end):
         it = st["it"]
@@ -226,16 +241,18 @@ def cmd_run(a):
                 np.savez_compressed(run / "current.npz", f=f_cur)
                 if st["run_current"] and Path(st["run_current"]).exists():
                     shutil.rmtree(st["run_current"], ignore_errors=True)
-                st.update(D_current=D, run_current=rdir, best_it=it)
+                st.update(D_current=D, run_current=rdir, best_it=it, grad_ready=False)
                 shutil.copytree(folder, run / "best_car", dirs_exist_ok=True)
                 try:
                     A = adjoint(rdir, d / "dafoam_case", cfg["np"], {})
                     g, ginfo = grid_gradient(car, folder, A["Xs"], A["dD_dXs"], cfg["sigma_mm"])
                     np.savez_compressed(run / "grad_current.npz", g=g)
+                    st["grad_ready"] = True
                     rec.update({k: v for k, v in A.items() if k not in ("Xs", "dD_dXs")}, **ginfo)
                     shutil.rmtree(d / "dafoam_case", ignore_errors=True)
-                except Exception as e:
+                except Exception as e:                              # next start redoes the adjoint
                     rec.update(adjoint_error=repr(e)[:300])
+                    st["it"] = it + 1                               # keep it_NNN (its car is best_car)
                     log(run, rec); (run / "state.json").write_text(json.dumps(st, indent=1, default=str))
                     raise
         st["it"] = it + 1

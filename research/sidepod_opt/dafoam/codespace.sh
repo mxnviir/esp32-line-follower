@@ -10,7 +10,7 @@
 # The codespace solves its own state A (Part 2's pipeline), then DAFoam's primal and adjoint, and
 # commits dafoam_sens.json/.npz under gate_results_cs/dafoam/ (pushed to the branch).
 set -e
-REPO=${REPO:-mxnviir/esp32-line-follower}
+REPO=${REPO:-mxnviir/stem-racing-paper}
 BRANCH=${BRANCH:-ccr-a4f3e46d-23atrh}
 STATE=${STATE:-$HOME/.sidepod_dafoam_codespace}
 NP=${NP:-8}; ITERS=${ITERS:-300}
@@ -24,13 +24,13 @@ start)
 #!/bin/bash
 set -x
 exec > /workspaces/dafoam_job.log 2>&1
-cd /workspaces/esp32-line-follower
+cd /workspaces/stem-racing-paper
 python3 -m pip install --break-system-packages -q uv && uv venv -p 3.11 /workspaces/py && . /workspaces/py/bin/activate
 uv pip install -q numpy==2.4.6 scipy==1.17.1 pandas trimesh==5.2.0 scikit-image shapely rtree==1.4.1 mapbox-earcut \
   manifold3d==3.5.4 fast_simplification==0.2.0 jax jaxlib matplotlib pymeshlab==2025.7.post1 numba cadquery-ocp
 cd research/sidepod_opt
 echo START_RUN; date -u
-dafoam/remote_run.sh /workspaces/esp32-line-follower/research/sidepod_opt/gate_results_cs/dafoam $NP $ITERS
+dafoam/remote_run.sh /workspaces/stem-racing-paper/research/sidepod_opt/gate_results_cs/dafoam $NP $ITERS
 echo EXIT \$?; date -u
 git config user.name 'sidepod dafoam (codespace)'; git config user.email 'noreply@github.com'
 git add gate_results_cs/dafoam && git commit -q -m 'DAFoam gradient (codespace)

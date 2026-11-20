@@ -11,7 +11,7 @@
 set -x
 exec >> /workspaces/loop_job.log 2>&1
 SEEDS=${SEEDS:-"original lean block"}; NP=${NP:-4}; ITERS=${ITERS:-12}; HOURS=${HOURS:-10}
-ROOT=/workspaces/esp32-line-follower
+ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 BRANCH=$(cd $ROOT && git rev-parse --abbrev-ref HEAD)
 echo "START_SETUP $(date -u)"
 
@@ -20,24 +20,28 @@ sudo apt-get update -q && sudo apt-get install -y -q libopengl0 libglu1-mesa lib
 [ -d /usr/lib/openfoam/openfoam2412 ] || { curl -s https://dl.openfoam.com/add-debian-repo.sh | sudo bash; sudo apt-get install -y -q openfoam2412-default; }
 
 # ---- Python (pinned as in codespace_gate.sh)
-if [ ! -x /workspaces/py/bin/python ]; then
-  python3 -m pip install --break-system-packages -q uv && uv venv -p 3.11 /workspaces/py
-  . /workspaces/py/bin/activate
-  uv pip install -q numpy==2.4.6 scipy==1.17.1 pandas trimesh==5.2.0 scikit-image shapely rtree==1.4.1 mapbox-earcut \
-    manifold3d==3.5.4 fast_simplification==0.2.0 jax jaxlib matplotlib pymeshlab==2025.7.post1 numba cadquery-ocp
-fi
+export UV_CACHE_DIR=/tmp/uv-cache          # the cache on the big disk, not the 32 GB one
+[ -x /workspaces/py/bin/python ] || { python3 -m pip install --break-system-packages -q uv && uv venv -p 3.11 /workspaces/py; }
+for i in 1 2 3 4 5; do        # PyPI sometimes times out: retry until the stack imports
+  /workspaces/py/bin/python -c "import numpy, scipy, trimesh, skimage, manifold3d, jax, numba, OCP, pymeshlab" 2>/dev/null && break
+  VIRTUAL_ENV=/workspaces/py uv pip install -q numpy==2.4.6 scipy==1.17.1 pandas trimesh==5.2.0 scikit-image shapely rtree==1.4.1 mapbox-earcut \
+    manifold3d==3.5.4 fast_simplification==0.2.0 jax jaxlib matplotlib pymeshlab==2025.7.post1 numba cadquery-ocp || sleep $((20 * i))
+done
 export PATH=/workspaces/py/bin:$PATH
 
+# ---- disk: on a 4-core codespace (32 GB disk) OpenFOAM + venv + the DAFoam image (containerd store,
+#      /var/lib/containerd) leave ~6.6 GB free for CFD runs; swap goes on the big /tmp disk below.
 # ---- DAFoam image (Docker Hub sometimes answers 429: retry)
 for i in 1 2 3 4 5 6; do docker image inspect dafoam/opt-packages:v5.1.1 >/dev/null 2>&1 && break
   docker pull -q dafoam/opt-packages:v5.1.1 && break; sleep $((30 * i)); done
 
-# ---- swap if RAM < 16 GB per seed
-n=$(echo $SEEDS | wc -w); need=$((16 * n)); have=$(free -g | awk '/Mem/{print $2}')
+# ---- swap if RAM < 24 GB per seed (DAFoam peak ~15 GB + the final dR/dXv product)
+n=$(echo $SEEDS | wc -w); need=$((24 * n)); have=$(free -g | awk '/Mem/{print $2}')
 if [ "$have" -lt "$need" ] && ! swapon --show | grep -q swapfile; then
-  sudo fallocate -l $((need - have + 8))G /swapfile && sudo chmod 600 /swapfile && sudo mkswap /swapfile && sudo swapon /swapfile
+  sudo fallocate -l $((need - have + 8))G /tmp/swapfile && sudo chmod 600 /tmp/swapfile && sudo mkswap /tmp/swapfile && sudo swapon /tmp/swapfile   # /tmp: the big disk
 fi
-free -g; nproc
+free -g; swapon --show; nproc; docker image ls; df -h / /tmp /workspaces
+[ -n "$SETUP_ONLY" ] && { echo "SETUP_DONE $(date -u)"; exit 0; }
 
 source /usr/lib/openfoam/openfoam2412/etc/bashrc
 export OMPI_MCA_rmaps_base_oversubscribe=1 CFD_DIV_U="bounded Gauss upwind"
@@ -70,7 +74,11 @@ for s in $SEEDS; do
       python -W ignore shape_loop.py run runs/$s --iters 1 > runs/$s/last_run.out 2>&1; rc=$?
       cat runs/$s/last_run.out | tail -3
       commit $s
-      [ $rc -ne 0 ] && { echo "seed $s: shape_loop exited $rc (see runs/$s/last_run.out)"; break; }
+      if [ $rc -ne 0 ]; then   # a failed adjoint is redone on the next start (grad_ready): allow one retry
+        if [ -z "$retried" ] && tail -1 runs/$s/log.jsonl 2>/dev/null | grep -q adjoint_error; then
+          retried=1; echo "seed $s: adjoint failed, retrying once"; continue; fi
+        echo "seed $s: shape_loop exited $rc (see runs/$s/last_run.out)"; break
+      fi
       grep -q "step below minimum" runs/$s/last_run.out && { echo "seed $s: converged"; break; }
     done
     commit $s final

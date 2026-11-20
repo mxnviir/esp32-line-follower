@@ -228,8 +228,8 @@ def build_exact(out: Path, spec=None, domain=DOMAIN_MM):
 
 
 # ---------------------------------------------------------------------- designed cars
-FUSE_FUZZY_MM = 0.06          # see _fuse_car
-CEILING_GAP_MM = 0.02         # see pod_mesh
+SEAM_MM = 0.3                # exact-CAD / triangle-pod seam this far outside the design region (seam_region)
+SEAM_OVERLAP_MM = 0.05       # the pod reaches this far past the seam into the kept CAD
 POD_FACES = 4500             # triangles kept on the designed pod (SimScale imports a few thousand faces; 32k failed)
 
 
@@ -246,21 +246,6 @@ def _fused(shape):
     return u.Shape()
 
 
-def _fuse_car(kept, pod):
-    """Kept CAD + faceted pod as ONE solid. In the seam strip the pod's triangles lie within a few
-    hundredths of a mm of the exact CAD surface; a fuzzy union (tolerance FUSE_FUZZY_MM) merges such
-    near-coincident faces instead of leaving faces SimScale's import rejects (fault-face-bad_face_face)."""
-    from OCP.BRepAlgoAPI import BRepAlgoAPI_Fuse
-    from OCP.OCP.collections import List_TopoDS_Shape
-    f = BRepAlgoAPI_Fuse()
-    a, b = List_TopoDS_Shape(), List_TopoDS_Shape()
-    a.Append(kept); b.Append(pod)
-    f.SetArguments(a); f.SetTools(b); f.SetFuzzyValue(FUSE_FUZZY_MM); f.Build()
-    if not f.IsDone():
-        raise _geom_error("kept CAD + pod fuse failed")
-    return _fused(f.Shape())
-
-
 def _region_solid(M):
     """manifold3d region (STEP frame, mm, planar faces) -> OCC solid with merged planar faces."""
     import cadio as CI
@@ -274,29 +259,41 @@ def _car_frame_mesh(m, x_nose_mm):
     return t
 
 
+def seam_region(car, grow_mm):
+    """The sidepod region grown by `grow_mm` on every side, the ceiling included (manifold3d, STEP frame).
+    The SimScale seam between exact CAD and the triangle pod lies on this, SEAM_MM outside the design
+    region: the region's own planes (the 27.175 mm sidepod top, the spine underside at z = 17) are
+    planes of the team's CAD, and a seam lying ON a CAD face gives faults SimScale's import cannot heal."""
+    import dataclasses
+    s0 = car.s
+    if s0.ceiling_mm is not None:
+        car.s = dataclasses.replace(s0, ceiling_mm=s0.ceiling_mm + grow_mm)
+    try:
+        return car._region_manifold(grow_mm)
+    finally:
+        car.s = s0
+
+
 def pod_mesh(car, body_mesh, faces=POD_FACES, grow_mm=2.0):
-    """The designed body inside the region (+y side, STEP frame, mm), decimated to `faces`
-    triangles. Decimated with a margin into the kept CAD, then cut with the region grown by the
-    seam allowance, so the cut planes are exact and the pod still overlaps the kept CAD."""
-    import fast_simplification
+    """The designed body inside the seam region (+y side, STEP frame, mm), reduced to `faces`
+    well-shaped triangles, overlapping the kept CAD by SEAM_OVERLAP_MM. Outside the design region the
+    body IS the team's CAD, so the band between the region and the seam is the original shape."""
     import manifold3d as mf
+    import pymeshlab as ml
     import cadio as CI
     plus_y = mf.Manifold.cube([1000.0, 500.0, 500.0]).translate([-500.0, -1.0, -100.0])
-    wide = car._region_manifold(grow_mm) ^ plus_y
-    m = CI.from_manifold(CI.to_manifold(body_mesh) ^ wide)
-    ratio = max(0.0, 1.0 - faces / max(len(m.faces), 1))
-    if ratio > 0:
-        v, f = fast_simplification.simplify(m.vertices.astype(np.float32), m.faces.astype(np.int32), ratio)
-        m = trimesh.Trimesh(v, f, process=True)
+    m = CI.from_manifold(CI.to_manifold(body_mesh) ^ (seam_region(car, SEAM_MM + grow_mm) ^ plus_y))
+    if len(m.faces) > faces:
+        ms = ml.MeshSet(); ms.add_mesh(ml.Mesh(m.vertices, m.faces))
+        ms.meshing_decimation_quadric_edge_collapse(targetfacenum=faces, qualitythr=0.5, preservenormal=True, planarquadric=True,
+                                                     planarweight=0.002, optimalplacement=True, preservetopology=True, autoclean=True)
+        mm = ms.current_mesh()
+        m = trimesh.Trimesh(mm.vertex_matrix(), mm.face_matrix(), process=True)
+        if m.volume < 0:
+            m.invert()
         if not m.is_watertight:
             m = CI.repair(m)
-    cut = car.region_Me ^ plus_y
-    if car.s.ceiling_mm is not None:
-        # The region's ceiling is the height of the team's sidepod top: a pod top lying exactly in that
-        # plane next to the kept CAD gives edges SimScale's import cannot heal (fault-edge-invalid at the
-        # spine/ceiling corner). The CFD copy of the pod stops CEILING_GAP_MM lower; the milled part is unchanged.
-        cut = cut ^ mf.Manifold.cube([1000.0, 500.0, car.s.ceiling_mm - CEILING_GAP_MM + 100.0]).translate([-500.0, -1.0, -100.0])
-    pod = CI.from_manifold(CI.to_manifold(m) ^ cut)
+    pod = CI.from_manifold(CI.to_manifold(m) ^ (seam_region(car, SEAM_MM + SEAM_OVERLAP_MM) ^ plus_y))
     return CI.clean(pod)
 
 
@@ -317,7 +314,7 @@ def build_design(car, body_mesh, out: Path, domain=DOMAIN_MM, faces=POD_FACES):
     s = car.s
     solids = CI.read_step_solids(s.step)
     body = CI.outer_solid(solids[s.body_solid])
-    kc = BRepAlgoAPI_Cut(body, _region_solid(car.region_M)); kc.SetFuzzyValue(1e-5); kc.Build()
+    kc = BRepAlgoAPI_Cut(body, _region_solid(seam_region(car, SEAM_MM))); kc.SetFuzzyValue(1e-5); kc.Build()
     if not kc.IsDone():
         raise _geom_error("kept-CAD Boolean failed")
     kept = to_car_frame(kc.Shape(), s.x_nose_mm)
@@ -330,31 +327,39 @@ def build_design(car, body_mesh, out: Path, domain=DOMAIN_MM, faces=POD_FACES):
     (x0, y0, _), (x1, y1, z1) = domain
     z0 = min(zmin) - ROAD_GAP_MM
     domain = ((x0, y0, z0), (x1, y1, z1))
-    box = BRepPrimAPI_MakeBox(gp_Pnt(x0, y0, z0), gp_Pnt(x1, y1, z1)).Shape()
-    cut = BRepAlgoAPI_Cut()
-    args, tools = List_TopoDS_Shape(), List_TopoDS_Shape()
-    args.Append(box)
-    for sh in [kept, pod, *wheel_s.values()]:
-        tools.Append(sh)
-    cut.SetArguments(args); cut.SetTools(tools); cut.SetFuzzyValue(1e-5); cut.Build()
-    if not cut.IsDone():
-        raise _geom_error("air-volume Boolean failed")
-    fluid = cut.Shape()
-    # air sealed inside the body comes out as extra solids: no flow reaches it, so it is dropped (and logged)
-    from OCP.TopAbs import TopAbs_SOLID
-    from OCP.TopoDS import TopoDS
-    sols = []
-    ex = TopExp_Explorer(fluid, TopAbs_SOLID)
-    while ex.More():
-        sols.append(TopoDS.Solid(ex.Current())); ex.Next()
-    dropped = 0.0
-    if len(sols) > 1:
-        vols = [volume(x) for x in sols]
-        k = int(np.argmax(vols))
-        dropped = float(sum(vols) - vols[k])
-        fluid = sols[k]
-    removed = (x1 - x0) * (y1 - y0) * (z1 - z0) - volume(fluid) - dropped
     expect = 0.5 * body_mesh.volume + sum(volume(w) for w in wheel_s.values())
+    V = (x1 - x0) * (y1 - y0) * (z1 - z0)
+    # The fuzzy tolerance that works differs per car (1e-5 mm has removed half the car on one): try a
+    # few, keep the first whose removed volume is car + wheels
+    for fz in (0.0, 1e-6, 1e-5):
+        box = BRepPrimAPI_MakeBox(gp_Pnt(x0, y0, z0), gp_Pnt(x1, y1, z1)).Shape()
+        cut = BRepAlgoAPI_Cut()
+        args, tools = List_TopoDS_Shape(), List_TopoDS_Shape()
+        args.Append(box)
+        for sh in [kept, pod, *wheel_s.values()]:
+            tools.Append(sh)
+        cut.SetArguments(args); cut.SetTools(tools)
+        if fz:
+            cut.SetFuzzyValue(fz)
+        cut.Build()
+        if not cut.IsDone():
+            continue
+        fluid = cut.Shape()
+        from OCP.TopAbs import TopAbs_SOLID
+        from OCP.TopoDS import TopoDS
+        sols = []
+        ex = TopExp_Explorer(fluid, TopAbs_SOLID)
+        while ex.More():
+            sols.append(TopoDS.Solid(ex.Current())); ex.Next()
+        dropped = 0.0
+        if len(sols) > 1:                     # air sealed inside the body: no flow reaches it
+            vols = [volume(x) for x in sols]
+            k = int(np.argmax(vols)); dropped = float(sum(vols) - vols[k]); fluid = sols[k]
+        removed = V - volume(fluid) - dropped
+        if abs(removed / expect - 1) < 0.003:
+            break
+    else:
+        raise _geom_error(f"air-volume Boolean wrong at every tolerance (removed share {removed / expect:.4f})")
     labels = label_faces(fluid, cut, wheel_s, domain)
     counts = {}
     for n in labels.values():

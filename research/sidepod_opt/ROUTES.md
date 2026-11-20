@@ -148,6 +148,11 @@ external topology case was **not found** in their material (that is not proof it
   from a set-up direction are buildable, so the search can't produce closed tunnels, by the rules
   of the process rather than any limit of the method. The open `channel` seed came out at 22.4 cm³
   (first version: the slot was oversized and cut the outer pod loose). Fixed: an 8 mm outboard groove (the 6.35 mm ball must fit; a 6 mm one was refilled), seed now 57.3 cm³ and buildable.
+- **2026-11-20 17:57, bumps lost twice to container restarts.** The cloud container restarted at
+  ~17:41 and ~17:57, both while the session sat idle between messages; the detached bump jobs died
+  right as their solvers started. Files, installs and the gradient survived; swap had to be
+  re-enabled. Lesson: in this cloud session, long jobs survive only while a session-tracked
+  background task is running. Relaunched 17:57 with a tracked watcher; expected ~19:20 UTC.
 
 ## Sources
 

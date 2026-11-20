@@ -179,6 +179,35 @@ external topology case was **not found** in their material (that is not proof it
   order as the drag sensitivity. Fix in progress in the cloud session (sub-voxel surface from the
   continuous field, percentile-normalised clipped step, race-time objective with the mass price,
   morph-first meshing). Wait for the commit "shape_loop v2".
+- **2026-11-20 18:50, gradient check, 2 of 3 pairs in: both pass.** Steady model, coarse, ±1 mm,
+  noise 0.0025 mN per pair.
+
+  | site | measured (D₊ − D₋)/2 | adjoint | predicted / measured |
+  |---|---|---|---|
+  | `pod_rear` | −1.500 mN | −1.635 mN | 1.09 |
+  | `pod_front_low` | −0.690 mN | −0.458 mN | 0.66 |
+
+  Each bump against the unbumped state is nearly antisymmetric (−1.53 / +1.47 and −0.81 / +0.57 mN),
+  so 1 mm is inside the linear range. `pod_rear_top` (predicted +0.24 mN, the opposite sign) is running.
+- **2026-11-20 19:00, `shape_loop.py` v2** (replaces the version stopped at 18:45). Tested without
+  CFD on the real gradient, from the `original` seed:
+  - **Surface from the continuous field:** a true signed distance (slope 1), re-distanced at 4×
+    resolution; the CFD surface is cut from the field wherever the rules left the voxels alone. A
+    uniform 0.1 / 0.3 / 0.6 mm shift now changes the mesh volume by 0.9 / 3.4 / 6.9 cm³ (v1: nothing
+    below 1 mm). The seed's mesh volume equals the CAD's (157.522 cm³).
+  - **Step:** normalised by the 95th percentile of |g| on the surface band, clipped to ± step. A
+    1.5 mm step moves 44 % of the surface band by more than 0.1 mm (v1: 18 voxels). Gradient on
+    moves the rules forbid (growth through the legal block's faces, cargo foam) is zeroed first:
+    3 % of the total.
+  - **Objective = race time**, with foam volume priced by a multiplier (0 while lead remains, at
+    most the true 1.22 ms/cm³ once it is gone). From the team pod the first step is close to
+    volume-neutral (−0.2 cm³ of 67).
+  - **Meshing:** the last accepted mesh is reshaped onto the new body (the gate's low-noise path),
+    fresh mesh on failure. A step is accepted only if the solve converged and race time fell.
+  - **Running gradient check:** every step logs the first-order prediction beside the measured change.
+    The first-order prediction for the first 1.5 mm step is −69 mN whole car (−15 %), far more than
+    a linear model can be trusted for; the measured value of step 1 is the first real test of
+    the method at design scale.
 
 ## Sources
 

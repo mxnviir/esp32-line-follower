@@ -32,12 +32,12 @@ export PATH=/workspaces/py/bin:$PATH
 for i in 1 2 3 4 5 6; do docker image inspect dafoam/opt-packages:v5.1.1 >/dev/null 2>&1 && break
   docker pull -q dafoam/opt-packages:v5.1.1 && break; sleep $((30 * i)); done
 
-# ---- swap if RAM < 16 GB per seed
-n=$(echo $SEEDS | wc -w); need=$((16 * n)); have=$(free -g | awk '/Mem/{print $2}')
+# ---- swap if RAM < 24 GB per seed (DAFoam peak ~15 GB + the final dR/dXv product)
+n=$(echo $SEEDS | wc -w); need=$((24 * n)); have=$(free -g | awk '/Mem/{print $2}')
 if [ "$have" -lt "$need" ] && ! swapon --show | grep -q swapfile; then
   sudo fallocate -l $((need - have + 8))G /swapfile && sudo chmod 600 /swapfile && sudo mkswap /swapfile && sudo swapon /swapfile
 fi
-free -g; nproc
+free -g; swapon --show; nproc
 
 source /usr/lib/openfoam/openfoam2412/etc/bashrc
 export OMPI_MCA_rmaps_base_oversubscribe=1 CFD_DIV_U="bounded Gauss upwind"
@@ -70,7 +70,11 @@ for s in $SEEDS; do
       python -W ignore shape_loop.py run runs/$s --iters 1 > runs/$s/last_run.out 2>&1; rc=$?
       cat runs/$s/last_run.out | tail -3
       commit $s
-      [ $rc -ne 0 ] && { echo "seed $s: shape_loop exited $rc (see runs/$s/last_run.out)"; break; }
+      if [ $rc -ne 0 ]; then   # a failed adjoint is redone on the next start (grad_ready): allow one retry
+        if [ -z "$retried" ] && tail -1 runs/$s/log.jsonl 2>/dev/null | grep -q adjoint_error; then
+          retried=1; echo "seed $s: adjoint failed, retrying once"; continue; fi
+        echo "seed $s: shape_loop exited $rc (see runs/$s/last_run.out)"; break
+      fi
       grep -q "step below minimum" runs/$s/last_run.out && { echo "seed $s: converged"; break; }
     done
     commit $s final

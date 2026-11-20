@@ -1,5 +1,5 @@
 {
- "_comment": "Evolution on SimScale. Fill the four FILL_ME values (see SIMSCALE.md), then cron `python campaign.py tick <dir>`. Budgets are cars per method run; lower them to fit your SimScale quota. SimScale's drag is only compared with SimScale's own reference car (made once per stage); the winners are re-timed in our OpenFOAM pipeline on GitHub Actions.",
+ "_comment": "Evolution on SimScale, STEP air-volume route (simscale_step_eval.py). Keys: export SIMSCALE_API_KEYS='k1,k2,...' (never in a file in the repo). Each key runs at most runs_per_key cars, then the next key is used; when all are used the campaign waits (`python campaign.py tick <dir>` reports it). Every car, the team's included, goes through the same route: exact CAD outside the sidepod region, the pod as ~4500 triangles, exact wheels, road 0.15 mm under the wheels. The winners are re-timed in our OpenFOAM pipeline on GitHub Actions (stage recheck).",
  "h_mm": 1.0,
  "car": {
   "cargo": false,
@@ -13,18 +13,13 @@
    "type": "search",
    "fidelity": "simscale",
    "evaluator": {
-    "kind": "simscale",
-    "project_id": "FILL_ME",
-    "template_sim_id": "FILL_ME",
-    "mesh_template_id": "FILL_ME",
-    "half": true,
+    "kind": "simscale_step",
+    "runs_per_key": 10,
     "speed_mps": 20.0,
-    "max_cost": "FILL_ME (SimScale's per-run estimate, e.g. core hours)",
-    "bodies": [
-     "car",
-     "wheelF",
-     "wheelR"
-    ]
+    "fineness": 6,
+    "box_mm": 1.5,
+    "iters": 1000,
+    "max_cost": 20.0
    },
    "starts": [
     "original"
@@ -34,16 +29,17 @@
    ],
    "batch": 8,
    "methods": {
-    "sail": {
-     "n_init": 12,
-     "budget": 80,
-     "batch": 8
-    },
     "cma": {
-     "popsize": 12,
-     "sigma": 1.2,
-     "budget": 240,
-     "batch": 12
+     "popsize": 8,
+     "sigma": 1.0,
+     "budget": 400,
+     "batch": 8,
+     "lattice": [
+      6,
+      3,
+      4
+     ],
+     "amp_mm": 12.0
     }
    }
   },

@@ -24,6 +24,7 @@ than the container holds is illegal: logged, told to the method as None, never s
 from __future__ import annotations
 
 import json
+import os
 import pickle
 import sys
 import time
@@ -86,6 +87,13 @@ class Campaign:
                                                      self.root / "simscale_inflight.json",
                                                      speed_mps=spec.get("speed_mps", 20.0), symmetric_half=spec.get("half", True),
                                                      max_cost=spec.get("max_cost"), bodies=spec.get("bodies"))
+            elif k == "simscale_step":
+                import simscale_step_eval as SSE
+                self._ev[key] = SSE.SimScaleStepEvaluator(self.car, self.root / "simscale_state.json",
+                                                          runs_per_key=spec.get("runs_per_key", 10),
+                                                          speed_mps=spec.get("speed_mps", 20.0), max_cost=spec.get("max_cost"),
+                                                          fineness=spec.get("fineness", 6), box_mm=spec.get("box_mm", 1.5),
+                                                          iters=spec.get("iters", 1000), project_id=spec.get("project_id"))
             elif k == "adjoint":
                 self._ev[key] = EV.AdjointEvaluator(self.car, self.rm, spec.get("backend", "esi"), spec.get("res", "medium"))
             else:
@@ -214,6 +222,10 @@ class Campaign:
                 m.cfg = self._neat_cfg = getattr(self, "_neat_cfg", None) or self._neat_config()
             rep = m.rep
             n = min(o.get("batch", s.get("batch", 1)), budget - rs["used"])
+            if hasattr(ev, "capacity"):                       # SimScale: only as many cars as the keys can still run
+                n = min(n, ev.capacity())
+                if n <= 0:
+                    continue
             xs = m.ask(n)
             illegal_xs, cases = [], []
             for x in xs:
@@ -514,13 +526,18 @@ def main():
         c.tick()
     elif cmd == "run":
         while c.tick():
+            time.sleep(float(os.environ.get("TICK_S", "60")))        # cloud evaluators: poll once a minute
             s = c.stage()
             print(time.strftime("%H:%M:%S"), "stage", s and s["name"], "runs",
                   {k: (v["used"], round(v["best"], 5) if v["best"] else None) for k, v in c.state["runs"].items()}, flush=True)
         print("finished" if not c.state.get("stopped") else c.state["stopped"])
     elif cmd == "status":
-        print(json.dumps({"stage": c.stage() and c.stage()["name"], "runs": c.state["runs"], "inflight": len(c.state["inflight"]),
-                          "gates": c.state.get("gates"), "stopped": c.state.get("stopped")}, indent=1, default=float))
+        out = {"stage": c.stage() and c.stage()["name"], "runs": c.state["runs"], "inflight": len(c.state["inflight"]),
+               "gates": c.state.get("gates"), "stopped": c.state.get("stopped")}
+        s = c.stage()
+        if s and s.get("evaluator", {}).get("kind") == "simscale_step":
+            out["simscale"] = c.evaluator(s["evaluator"]).status()
+        print(json.dumps(out, indent=1, default=float))
     elif cmd == "report":
         import report
         report.report(c)

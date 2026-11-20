@@ -389,6 +389,7 @@ class Car:
         half = self.to_car_frame(CI.clean(half_mm))
         CI.write_ascii_named(half, out / "car_half.stl", "car", full.volume / 2, 0.002)
         CI.write_ascii_named(full, out / "body_full.stl", "car", body_mesh.volume * 1e-9)
+        CI.clean(body_mesh).export(out / "body_mm.stl")         # STEP frame, mm: the SimScale air volume is built from it
         omega = -s.speed_mps / (s.r_wheel / 1e3)
         surfaces = []
         for name, solid in (("wheelF", "wheel_fl"), ("wheelR", "wheel_rl")):      # the +y wheels

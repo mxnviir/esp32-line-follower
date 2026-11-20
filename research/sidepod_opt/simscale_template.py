@@ -136,6 +136,40 @@ def set_air(s, api, P, sid, volume_entities):
     s.SimulationsApi(api).update_simulation(P, sid, spec)
 
 
+SMALL_FEATURE_MM = 0.05                               # faces/edges smaller than this are ignored by the mesher
+BOX_M = ((-0.01, 0.0, -0.001), (0.30, 0.05, 0.06))   # refinement box around the car (car frame, m)
+
+
+def make_box(s, api, P):
+    """The refinement box primitive (one per project, reusable by every mesh operation)."""
+    (a, b, c), (d, e, f) = BOX_M
+    return s.SimulationsApi(api).create_geometry_primitive(P, s.CartesianBox(name="car box", min=vec(s, a, b, c),
+                                                                               max=vec(s, d, e, f))).geometry_primitive_id
+
+
+def create_case(s, api, P, gid, name, box, f=None, wheels=None, fineness=6, box_mm=1.5, iters=1000):
+    """Simulation + mesh operation for one imported air volume. Returns (simulation_id, mesh_operation_id)."""
+    f = f or faces_by_name(s, api, P, gid)
+    missing = [n for n in NAMES if not f[n]] + ([] if f["car"] else ["car"]) + ([] if f["volume"] else ["volume"])
+    if missing:
+        from simscale_step_eval import GeometryError
+        raise GeometryError(f"named faces missing after import: {missing}")
+    wheels = wheels or wheel_centres_m()
+    s_api = s.SimulationsApi(api)
+    spec = s.SimulationSpec(name=name, geometry_id=gid, model=build_spec(s, f, wheels, iters))
+    sid = s_api.create_simulation(P, spec).simulation_id
+    set_air(s, api, P, sid, f["volume"])
+    mo = s.MeshOperationsApi(api).create_mesh_operation(P, s.MeshOperation(name=f"{name} mesh", geometry_id=gid, model=s.SimmetrixMeshingFluid(
+        sizing=s.AutomaticMeshSizingSimmetrix(fineness=fineness, curvature=s.AutomaticCurvature()),
+        refinements=[s.RegionRefinementWithLength(name="car box", refinement=s.InsideRegionRefinementWithLength(
+            length=s.DimensionalLength(value=box_mm, unit="mm")),
+            topological_reference=s.TopologicalReference(entities=[]), geometry_primitive_uuids=[box])],
+        automatic_layer_settings=s.AutomaticLayerOn(), physics_based_meshing=True,
+        advanced_simmetrix_settings=s.AdvancedSimmetrixFluidSettings(          # suppress Boolean-seam slivers
+            small_feature_tolerance=s.DimensionalLength(value=SMALL_FEATURE_MM, unit="mm")))))
+    return sid, mo.mesh_operation_id
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("project"); ap.add_argument("geometry")
@@ -153,36 +187,24 @@ def main():
     assert all(f[n] for n in NAMES) and f["car"] and f["volume"], "a named face group is missing"
     wheels = wheel_centres_m()
     print("wheel centres (m):", wheels, flush=True)
-    s_api = s.SimulationsApi(api)
-    spec = s.SimulationSpec(name=a.name, geometry_id=gid, model=build_spec(s, f, wheels, a.iters))
-    sid = s_api.create_simulation(P, spec).simulation_id
-    set_air(s, api, P, sid, f["volume"])
-    # refinement box around the car (car frame, m)
-    box = s_api.create_geometry_primitive(P, s.CartesianBox(name="car box", min=vec(s, -0.01, 0.0, -0.001),
-                                                            max=vec(s, 0.30, 0.05, 0.06))).geometry_primitive_id
-    m_api = s.MeshOperationsApi(api)
-    mo = m_api.create_mesh_operation(P, s.MeshOperation(name=f"{a.name} mesh", geometry_id=gid, model=s.SimmetrixMeshingFluid(
-        sizing=s.AutomaticMeshSizingSimmetrix(fineness=a.fineness, curvature=s.AutomaticCurvature()),
-        refinements=[s.RegionRefinementWithLength(name="car box", refinement=s.InsideRegionRefinementWithLength(length=s.DimensionalLength(value=a.box_mm, unit="mm")),
-                                                  topological_reference=s.TopologicalReference(entities=[]),
-                                                  geometry_primitive_uuids=[box])],
-        automatic_layer_settings=s.AutomaticLayerOn(), physics_based_meshing=True)))
-    chk = m_api.check_mesh_operation_setup(P, mo.mesh_operation_id, simulation_id=sid)
+    box = make_box(s, api, P)
+    sid, mo_id = create_case(s, api, P, gid, a.name, box, f, wheels, a.fineness, a.box_mm, a.iters)
+    s_api, m_api = s.SimulationsApi(api), s.MeshOperationsApi(api)
+    mo = m_api.get_mesh_operation(P, mo_id)
+    chk = m_api.check_mesh_operation_setup(P, mo_id, simulation_id=sid)
     print("mesh check:", [(e.severity, getattr(e, "message", "")) for e in (chk.entries or [])], flush=True)
-    est = None
     try:
-        est = m_api.estimate_mesh_operation(P, mo.mesh_operation_id)
-        print("mesh estimate:", api.sanitize_for_serialization(est), flush=True)
+        print("mesh estimate:", api.sanitize_for_serialization(m_api.estimate_mesh_operation(P, mo_id)), flush=True)
     except Exception as e:
         print("no mesh estimate:", str(e)[:200])
-    ids = {"project_id": P, "geometry_id": gid, "template_sim_id": sid, "mesh_template_id": mo.mesh_operation_id}
+    ids = {"project_id": P, "geometry_id": gid, "template_sim_id": sid, "mesh_template_id": mo_id, "box_primitive": box}
     print(json.dumps(ids), flush=True)
     (HERE / "simscale_ids.json").write_text(json.dumps(ids, indent=1))
     if a.run:
-        m_api.start_mesh_operation(P, mo.mesh_operation_id, simulation_id=sid)
+        m_api.start_mesh_operation(P, mo_id, simulation_id=sid)
         t0 = time.time()
         while True:
-            st = m_api.get_mesh_operation(P, mo.mesh_operation_id)
+            st = m_api.get_mesh_operation(P, mo_id)
             print("mesh", st.status, st.progress, round(time.time() - t0), "s", flush=True)
             if st.status in ("FINISHED", "FAILED", "CANCELED"):
                 break

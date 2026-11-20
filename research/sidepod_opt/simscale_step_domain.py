@@ -227,6 +227,127 @@ def build_exact(out: Path, spec=None, domain=DOMAIN_MM):
             "faces_total": nf, "named": counts, "ground_mm": z0, "wheel_bottom_mm": min(zmin), "road_gap_mm": ROAD_GAP_MM, "secs": round(time.time() - t0)}
 
 
+# ---------------------------------------------------------------------- designed cars
+POD_FACES = 4500             # triangles kept on the designed pod (SimScale imports a few thousand faces; 32k failed)
+
+
+def _fused(shape):
+    """Merge coplanar neighbouring faces (the region's flat cut planes come in as many triangles)."""
+    from OCP.ShapeUpgrade import ShapeUpgrade_UnifySameDomain
+    u = ShapeUpgrade_UnifySameDomain(shape, True, True, False)
+    u.Build()
+    return u.Shape()
+
+
+def _region_solid(M):
+    """manifold3d region (STEP frame, mm, planar faces) -> OCC solid with merged planar faces."""
+    import cadio as CI
+    return _fused(stl_solid(CI.from_manifold(M)))
+
+
+def _car_frame_mesh(m, x_nose_mm):
+    t = m.copy()
+    t.vertices[:, 0] = x_nose_mm - t.vertices[:, 0]
+    t.invert()
+    return t
+
+
+def pod_mesh(car, body_mesh, faces=POD_FACES, grow_mm=2.0):
+    """The designed body inside the region (+y side, STEP frame, mm), decimated to `faces`
+    triangles. Decimated with a margin into the kept CAD, then cut with the region grown by the
+    seam allowance, so the cut planes are exact and the pod still overlaps the kept CAD."""
+    import fast_simplification
+    import manifold3d as mf
+    import cadio as CI
+    plus_y = mf.Manifold.cube([1000.0, 500.0, 500.0]).translate([-500.0, -1.0, -100.0])
+    wide = car._region_manifold(grow_mm) ^ plus_y
+    m = CI.from_manifold(CI.to_manifold(body_mesh) ^ wide)
+    ratio = max(0.0, 1.0 - faces / max(len(m.faces), 1))
+    if ratio > 0:
+        v, f = fast_simplification.simplify(m.vertices.astype(np.float32), m.faces.astype(np.int32), ratio)
+        m = trimesh.Trimesh(v, f, process=True)
+        if not m.is_watertight:
+            m = CI.repair(m)
+    pod = CI.from_manifold(CI.to_manifold(m) ^ car.region_Me ^ plus_y)
+    return CI.clean(pod)
+
+
+def build_design(car, body_mesh, out: Path, domain=DOMAIN_MM, faces=POD_FACES):
+    """A designed car (Car.build's body mesh, STEP frame, mm) as a SimScale air volume: the team's
+    exact CAD outside the sidepod region (B-rep minus the exact region), the designed pod inside it
+    (faceted, a few thousand triangles), the exact wheels; road ROAD_GAP_MM under the wheels."""
+    from OCP.BRepAlgoAPI import BRepAlgoAPI_Cut
+    from OCP.BRepPrimAPI import BRepPrimAPI_MakeBox
+    from OCP.OCP.collections import List_TopoDS_Shape
+    from OCP.gp import gp_Pnt
+    from OCP.Bnd import Bnd_Box
+    from OCP.BRepBndLib import BRepBndLib
+    from OCP.TopAbs import TopAbs_FACE
+    from OCP.TopExp import TopExp_Explorer
+    import cadio as CI
+    t0 = time.time()
+    s = car.s
+    solids = CI.read_step_solids(s.step)
+    body = CI.outer_solid(solids[s.body_solid])
+    kc = BRepAlgoAPI_Cut(body, _region_solid(car.region_M)); kc.SetFuzzyValue(1e-5); kc.Build()
+    assert kc.IsDone(), "kept-CAD Boolean failed"
+    kept = to_car_frame(kc.Shape(), s.x_nose_mm)
+    pm = pod_mesh(car, body_mesh, faces)
+    pod = _fused(stl_solid(_car_frame_mesh(pm, s.x_nose_mm)))
+    wheel_s = {"wheelF": to_car_frame(solids["wheel_fl"], s.x_nose_mm), "wheelR": to_car_frame(solids["wheel_rl"], s.x_nose_mm)}
+    zmin = []
+    for w in wheel_s.values():
+        b = Bnd_Box(); BRepBndLib.Add_s(w, b, False); zmin.append(b.CornerMin().Z())
+    (x0, y0, _), (x1, y1, z1) = domain
+    z0 = min(zmin) - ROAD_GAP_MM
+    domain = ((x0, y0, z0), (x1, y1, z1))
+    box = BRepPrimAPI_MakeBox(gp_Pnt(x0, y0, z0), gp_Pnt(x1, y1, z1)).Shape()
+    cut = BRepAlgoAPI_Cut()
+    args, tools = List_TopoDS_Shape(), List_TopoDS_Shape()
+    args.Append(box)
+    for sh in [kept, pod, *wheel_s.values()]:
+        tools.Append(sh)
+    cut.SetArguments(args); cut.SetTools(tools); cut.SetFuzzyValue(1e-5); cut.Build()
+    assert cut.IsDone(), "Boolean failed"
+    fluid = cut.Shape()
+    # air sealed inside the body comes out as extra solids: no flow reaches it, so it is dropped (and logged)
+    from OCP.TopAbs import TopAbs_SOLID
+    from OCP.TopoDS import TopoDS
+    sols = []
+    ex = TopExp_Explorer(fluid, TopAbs_SOLID)
+    while ex.More():
+        sols.append(TopoDS.Solid(ex.Current())); ex.Next()
+    dropped = 0.0
+    if len(sols) > 1:
+        vols = [volume(x) for x in sols]
+        k = int(np.argmax(vols))
+        dropped = float(sum(vols) - vols[k])
+        fluid = sols[k]
+    removed = (x1 - x0) * (y1 - y0) * (z1 - z0) - volume(fluid) - dropped
+    expect = 0.5 * body_mesh.volume + sum(volume(w) for w in wheel_s.values())
+    labels = label_faces(fluid, cut, wheel_s, domain)
+    counts = {}
+    for n in labels.values():
+        counts[n] = counts.get(n, 0) + 1
+    nf, ns = 0, 0
+    ex = TopExp_Explorer(fluid, TopAbs_FACE)
+    while ex.More():
+        nf += 1; ex.Next()
+    from OCP.TopAbs import TopAbs_SOLID
+    ex = TopExp_Explorer(fluid, TopAbs_SOLID)
+    while ex.More():
+        ns += 1; ex.Next()
+    rep = {"step": str(out), "removed_mm3": removed, "expected_mm3": expect, "removed_share": removed / expect,
+           "faces_total": nf, "solids": ns, "dropped_air_mm3": dropped, "pod_triangles": len(pm.faces), "named": counts, "ground_mm": z0,
+           "secs": round(time.time() - t0)}
+    ok = ns == 1 and abs(rep["removed_share"] - 1) < 0.003 and all(counts.get(n) for n in
+                                                                    ("inlet", "outlet", "symmetry", "side", "top", "ground", "wheelF", "wheelR"))
+    rep["ok"] = bool(ok)
+    if ok:
+        write_step(fluid, labels, out)
+    return rep
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("folder", help="car folder (faceted car) or 'exact' (the team's STEP as is)")

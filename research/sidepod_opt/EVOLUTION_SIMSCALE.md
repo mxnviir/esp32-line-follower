@@ -4,10 +4,9 @@ This guide takes someone new to the repo from nothing to a verified, faster side
 
 All paths below are relative to `research/sidepod_opt/` unless they start with `.github/` or `part`.
 
-**Status (2026-11-20):**
+**Status (2026-11-20):** the full route runs on SimScale. The team car's air volume was imported, meshed (5.7 M cells) and solved; evolved designs import and mesh through the campaign. The evaluator takes several API keys, about 10 runs per free account.
 
-| Part | Status |
-|---|---|
+---|---|
 | Design rules, geometry engine, legality checks, STL export | built and tested here |
 | Campaign loop (CMA-ES, SAIL) | tested end to end against a mocked SimScale |
 | SimScale API calls | checked against the SDK source and its examples; **never run against real SimScale** (no access from where it was built) |
@@ -56,7 +55,7 @@ Use Python 3.11–3.13:
 
 ```bash
 pip install numpy scipy scikit-image trimesh numba cma neat-python scikit-learn jax cadquery-ocp \
-            manifold3d pymeshlab rtree shapely mapbox-earcut matplotlib
+            manifold3d pymeshlab fast-simplification rtree shapely mapbox-earcut matplotlib
 ```
 
 The SimScale SDK is not on PyPI:
@@ -76,81 +75,87 @@ python simscale_tool.py export /tmp/team_car                # expect: "check": {
 python simscale_tool.py export /tmp/no_pod --design none    # the car with no sidepod, also legal
 ```
 
-### 3.2 SimScale access
+### 3.2 SimScale access (API keys)
 
-1. Your plan must include **API access**: account settings → "API keys". If that page doesn't exist, this route can't run; use section 7's GitHub Actions route instead.
-2. Create a key, then `export SIMSCALE_API_KEY=...`. Never commit it, and never put it in a file in the repo.
-3. Check it with `python simscale_tool.py check`. You should see "SDK ok, API key ok".
+1. Your plan must include **API access**: account settings → "API keys".
+2. Free/test accounts only have enough credit for about **10 runs each**. The evaluator takes several keys and uses each one for at most `runs_per_key` runs (10), then moves on to the next:
+   ```bash
+   export SIMSCALE_API_KEYS='key1,key2,key3'      # comma, space or newline separated; SIMSCALE_API_KEY also works for one
+   ```
+   Never commit a key or write it into a file in the repo. The state file stores only a 10-character fingerprint of each key (sha256), its project and its run count.
+3. Check a key with `SIMSCALE_API_KEY=... python simscale_tool.py check`. You should see "SDK ok, API key ok".
+4. Behind an HTTPS proxy (e.g. a cloud container), `HTTPS_PROXY` and `SSL_CERT_FILE` / `REQUESTS_CA_BUNDLE` are passed to the SDK automatically (urllib3 ignores them otherwise). The host `api.simscale.com` must be allowed.
 
-### 3.3 The template simulation (in the SimScale web UI, once)
+**There is no web-UI setup.** Every account gets a project called "sidepod evolution", created through the API on first use, and every car gets its own simulation and mesh operation, built from code (`simscale_template.create_case`).
 
-Every car is a copy of this simulation. Settings, copied from the repo's own OpenFOAM setup (Part 2):
-
-1. **Upload the team's car.** Run `python simscale_tool.py export team_car`, zip `car_half.stl`, `wheelF.stl` and `wheelR.stl`, and upload the zip as ONE geometry, units **m**. The STL solids are named `car`, `wheelF`, `wheelR`.
-2. **Check the body names SimScale gave them.** Run `python simscale_tool.py upload team_car --project <ID>`, which prints the imported geometry. If the bodies aren't called `car`, `wheelF`, `wheelR`, put SimScale's names in `"bodies"` in `config.simscale.json` (same order).
-3. **Create one simulation:**
+### 3.3 What every car's simulation is (set in `simscale_template.py`)
 
 | Setting | Value |
 |---|---|
-| Analysis | Incompressible, steady, k-omega SST |
-| Fluid | air, ν = 1.48e-5 m²/s (μ 1.813e-5, ρ 1.225) |
-| Domain | external box: x −0.771 to 2.314 m, y 0 to 0.192 m, z 0 to 0.245 m (nose at x = 0, flow +x) |
-| Inlet (x min) | velocity (20, 0, 0) m/s, turbulence intensity 0.5 %, eddy viscosity ratio 5 |
-| Outlet (x max) | pressure 0 |
-| y = 0 | **symmetry** (half car) |
-| Side, top | slip |
-| Ground (z = 0) | **moving wall**, (20, 0, 0) m/s (rolling road) |
-| `car` | no-slip wall |
-| `wheelF` | rotating wall, axis (0, 1, 0) through (0.055384, 0.027875, 0.01382) m, ω = −1416.43 rad/s |
-| `wheelR` | rotating wall, axis (0, 1, 0) through (0.193384, 0.024875, 0.01382) m, ω = −1416.43 rad/s |
-| Result control | **"Forces and moments"** (exactly this name) on `car` + `wheelF` + `wheelR` |
+| Geometry | ONE solid: the air volume (half wind tunnel minus the car), STEP, mm, faces named (section 5) |
+| Analysis | Incompressible, steady, k-omega SST, 1000 iterations |
+| Fluid | SimScale's default Air |
+| Domain | x −771 to 2314 mm, y 0 to 192 mm, z from the road to 245 mm (nose at x = 0, flow +x) |
+| Inlet | velocity (20, 0, 0) m/s |
+| Outlet | pressure 0 |
+| y = 0 | symmetry (half car) |
+| Side, top | slip walls |
+| Road | moving wall (20, 0, 0) m/s, **0.15 mm below the wheels' lowest point** (no contact: the team's choice) |
+| Car | no-slip wall |
+| Wheels | rotating walls about +y through their centres, ω = −1416.43 rad/s (rim speed 20 m/s, rolling with the road) |
+| Result | "Forces and moments" on car + wheels; D20 and L20 = mean of the last 15 % of iterations × 2 (half car) |
+| Mesh | SimScale standard (Simmetrix) mesher, automatic sizing fineness 6, automatic layers, physics-based meshing, 1.5 mm cells in a box around the car: about 5.7 M cells, 0.15 core-hours |
 
-4. **Create one mesh operation.** Refine on the car and wheels and in a box under the car; the ride-height gap is 1.5–2 mm. Aim for at least 1.5–3 M cells for the half car if the budget allows (our own coarse runs used 0.1–0.5 M). Every car copies these mesh settings.
-5. **Run it once.** Our OpenFOAM gives the team's car D20 ≈ 0.366 N for the whole car (0.183 N half). Agreement within 10–15 % is normal across solvers; only SimScale-to-SimScale differences steer the search.
-6. **Find the IDs:** `python simscale_tool.py ids` lists every project, simulation and mesh operation with its ID.
+Cost seen on the first run: estimate 8.7 core-hours and 65 min; the real run took about 2 h 15 min wall time.
 
-## 4. Self-test: prove the SimScale side works (do this before spending budget)
-
-```bash
-python simscale_tool.py selftest --project <P> --template <SIM> --mesh <MESH_OP> --max-cost <X>
-```
-
-This runs 5 cars: the team's car **3 times**, plus 2 evolved designs. It writes `simscale_selftest/selftest.json` with:
-- **noise:** the spread of the 3 identical cars. Gains smaller than about 3× this are not real.
-- **cost and time per car,** which sets your budget (section 6).
-- **two evolved designs:** open their simulations in the web UI and check the boundary conditions sit on the right bodies (wheels rotating, car no-slip).
-
-To test a single car by hand:
+## 4. Smoke test (no runs spent)
 
 ```bash
-python simscale_tool.py export my_car --design none
-python simscale_tool.py run my_car --project <P> --template <SIM> --mesh <MESH_OP>
+export SIMSCALE_API_KEYS=... SIMSCALE_HOLD_RUNS=1 TICK_S=30
+python campaign.py init runs/smoke <a copy of config.simscale.json with cma budget 2, batch 2>
+python campaign.py run runs/smoke          # Ctrl-C after ~10 min
+python campaign.py status runs/smoke       # "simscale": cases should reach phase "mesh" with mesh_done true
 ```
+
+`SIMSCALE_HOLD_RUNS=1` stops every car after meshing, before a run is started (runs are what cost credits). Open the project in the web UI and check one simulation: wheels rotating, road moving, car no-slip.
+
+To build one air volume by hand: `python simscale_step_domain.py exact --out team.step` (the team car exactly as its STEP).
 
 ## 5. The geometry engine (what happens to each car)
 
-`simscale_tool.py export` and the campaign use the same pipeline (`geometry.py`):
+The design side (`geometry.py`) is unchanged:
 
 1. **Read** `cad/trial_car.step`: exact B-rep body and wheels.
 2. **Take the design:** a field over a 1 mm grid of the sidepod region. Foam goes where it's positive.
 3. **Finish:** symmetric left/right; forced air removed; locked CAD kept.
 4. **Mill:** top and bottom set-ups, 3.175 mm ball; unreachable air becomes foam.
 5. **Clean:** 3 mm minimum-wall filter, loose pieces deleted.
-6. **Check:** every rule in section 1.
-7. **Build the exact surface:** marching cubes of the pod, cut by the exact region solid, joined to the exact CAD. The result is watertight and welded as an STL reader sees it.
-8. **Weigh:** foam mass, lead and centre of mass.
-9. **Export** `cars/<id>/`:
+6. **Check:** every rule in section 1. Illegal cars never reach SimScale.
+7. **Build the exact surface** and weigh it (foam, lead, centre of mass).
+8. **Export** `cars/<id>/`: `body_mm.stl` (the body, STEP frame, mm), STLs for OpenFOAM, `mass.json`.
 
-| File | Content |
+**The SimScale air volume** (`simscale_step_domain.build_design`). SimScale's API cannot extract a flow volume, and it splits multi-solid STL uploads into pieces, so we send it the air itself, the way the team's Fusion add-in does:
+
+| Part of the car | How it goes into the STEP |
 |---|---|
-| `car_half.stl` | solid `car`, metres, half car, closed at y = 0 |
-| `wheelF.stl`, `wheelR.stl` | +y wheels |
-| `body_full.stl` (+ `wheelF_m.stl`, `wheelR_m.stl` from the tool) | for whole-car templates |
-| `mass.json` | foam, lead, centre of mass |
+| Everything outside the sidepod region | the team's **exact** B-rep, minus the exact region solid (OpenCASCADE Boolean) |
+| The designed sidepod (+y side) | triangles, reduced to about **4500** (measured error: 0.012 mm average, 0.2 mm worst), overlapping the kept CAD by 0.05 mm so there's no seam gap. The team's own sidepod is flat-faced: 82 triangles, exact. |
+| Wheels | exact B-rep |
+| Air | the half tunnel box minus all of the above, ONE solid |
 
-10. **SimScale** (`SimScaleEvaluator` in `evaluators.py`): zip the STLs, import, copy the template with every boundary condition moved onto the new bodies by name, mesh with the template's mesh settings, check the setup, estimate cost (skip if above `max_cost`), run, read "Forces and moments". The time-average of the last 30 % gives D20 and L20.
+Faces are named in the STEP (inlet, outlet, symmetry, side, top, ground, wheelF, wheelR; every other face is the car), and SimScale keeps the names. Checks before upload: one solid, all 8 names present, removed volume = car + wheels (±0.3 %).
 
-A different car means a different STEP: set `"step"` and the other `CarSpec` fields (axles, region box, halo) in the config's `"car"` block.
+Every car, **the team's included**, goes through the same route, so comparisons are like with like.
+
+**Imports SimScale refuses.** About 1 file in 3 is refused on import with no reason given, even though OpenCASCADE says it's valid. The same file always fails, so the evaluator rebuilds the pod with another triangle count (4500 → 5200 → 3900 → 6000 → 4200 → 6800) and tries again. That changes the shape by hundredths of a mm. In the smoke test, one design failed twice and passed on the third count.
+
+**Per car, the evaluator (`simscale_step_eval.py`) walks:**
+
+```
+wait (no key free) -> step (build + upload the STEP) -> import -> mesh -> run -> done
+```
+
+State is in `simscale_state.json` next to the campaign, so the campaign survives restarts.
 
 ## 6. Running the evolution
 
@@ -158,44 +163,38 @@ The config is `config.simscale.json`:
 
 | Stage | What runs |
 |---|---|
-| `evolve` | `sail`: 80 cars in batches of 8 (explores several *different* good pods). `cma`: 240 cars in generations of 12 (refines the best). Both start from the team's sidepod. The original car is also timed once on SimScale as the reference. |
+| `evolve` | CMA-ES, generations of 8, on a 6 × 3 × 4 lattice of design values (72 numbers plus a blend weight), starting from the team's sidepod. The team's car is timed first as the reference. The budget is set high (400); in practice **the keys are the budget**. |
 | `recheck` | The best 4 are re-timed in our own OpenFOAM on GitHub Actions (section 7). |
 
 ```bash
 python campaign.py init runs/simscale config.simscale.json
-# edit runs/simscale/config.json: project_id, template_sim_id, mesh_template_id, max_cost (and "bodies" if needed)
-export SIMSCALE_API_KEY=...
-python campaign.py tick runs/simscale        # run every 10 minutes from cron; each tick advances everything a step
-python campaign.py report runs/simscale      # runs.md, convergence.png, best.png, best/<car folders>
+export SIMSCALE_API_KEYS='key1,key2,...'
+python campaign.py run runs/simscale          # polls once a minute (TICK_S); or cron `campaign.py tick` every few minutes
+python campaign.py status runs/simscale       # stage, method progress, and per key: runs used, project, retired?
+python campaign.py report runs/simscale       # runs.md, convergence.png, best.png, best/<car folders>
 ```
 
-Example cron line:
+**Keys and the 10-run waves.**
+- The first key runs the reference plus up to 9 designs.
+- When every key in `SIMSCALE_API_KEYS` has used `runs_per_key` runs, the campaign submits nothing new. `status` shows `"capacity": 0`.
+- Add new keys to `SIMSCALE_API_KEYS` (keep the old ones there, so results of their last runs can still be fetched), then restart `campaign.py run`.
+- A key that returns a quota error or 401/403 is marked `retired`. Its unfinished cars move to the next key and start again from the upload.
 
-```
-*/10 * * * * cd /path/research/sidepod_opt && SIMSCALE_API_KEY=... python campaign.py tick runs/simscale >> runs/simscale/tick.log 2>&1
-```
+**Errors never blame a design unless the design is at fault.**
+- Network, quota and auth errors: the car waits and retries.
+- A bug in our code: the car waits, with `last_error` shown in `status`.
+- Only a geometry that can't be built, imported six times, meshed or solved counts as a failed design. CMA scores it as worse than its generation.
 
-**State lives on disk,** so a tick can die or be restarted at any point:
+**State lives on disk,** so a run can die or be restarted at any point:
 
 | File | Holds |
 |---|---|
-| `simscale_inflight.json` | cars in SimScale, each at import / mesh / run |
+| `simscale_state.json` | key fingerprints (runs used, project, retired) and cars in SimScale, each at its phase |
 | `state.json` | stages and budgets |
 | `designs.jsonl` | every car built, legal or not, with its result |
 | `runs/*.pkl` | each method's memory |
 
-**To stop:** set `"stopped": true` in `state.json`. **To change the budget:** edit `"budget"` per method before that method finishes.
-
-**Budget worksheet** (fill in from the self-test):
-
-| Item | Value |
-|---|---|
-| Cost per car (estimate / actual) | |
-| Time per car (import + mesh + run) | |
-| Cars SimScale runs in parallel on your plan | |
-| Noise (spread of 3 originals) | |
-| Total cost | 320 cars + references × cost per car |
-| Wall time | 320 ÷ cars in parallel × time per car |
+**To stop:** set `"stopped": true` in `state.json`.
 
 ## 7. Verification outside SimScale (GitHub Actions, free for public repos)
 
@@ -228,18 +227,22 @@ Each batch goes up as a release asset; results come back as workflow artifacts. 
 | Symptom | Likely cause |
 |---|---|
 | `simscale_sdk` import error | section 3.1 (pip build failure: use `PYTHONPATH`) |
-| "solids missing after import" | SimScale named the bodies differently: run `simscale_tool.py upload`, then set `"bodies"` |
-| "too expensive" in `designs.jsonl` | the estimate exceeded `max_cost` |
-| a car `FAILED` at mesh | a very thin gap; try the mesh operation's gap refinement. The car is told to the method as failed and the run continues. |
-| No progress | cron isn't running, or the API key isn't in the cron environment (`tick.log`) |
-| Everything illegal | read `check` in `designs.jsonl`: thin foam or pieces usually means the design's step size is too large (lower CMA `"sigma"`) |
+| `status` shows `capacity: 0` | every key has used its runs: add keys (section 6) |
+| a key `retired` with a quota/401 message | that account is out of credit or the key was reset; its cars move to the next key |
+| a car stuck with `last_error` | read the message: a proxy/network error clears itself; anything else is a bug to fix (the car is not blamed) |
+| "import refused 6 times" | a rare pod SimScale won't take at any triangle count; the design counts as failed |
+| "named faces missing after import" | the STEP lost its face names (check `simscale_step_domain.write_step`) |
+| "too expensive" in `designs.jsonl` | the estimate exceeded `max_cost` (core-hours) |
+| Everything illegal | read `check` in `designs.jsonl`: thin foam or pieces usually means the step size is too large (lower CMA `"sigma"`) |
 
 ## 10. What is tested, and what is not
 
 | Part | Status |
 |---|---|
-| Rules (cargo off, 27.175 mm ceiling, top/bottom milling, 3 mm walls, one piece), exact watertight export | tested: 18 evolved cars all watertight, nothing above 27.175 mm in the sidepod area; the team's car and the no-pod car pass |
-| Campaign loop with SimScale | tested against a mocked SDK (`test_simscale.py` plus a 4-tick campaign): 17 of 21 evolved cars legal |
-| SimScale calls | names and signatures checked against the SDK source; **not yet run for real** (section 4 does it) |
+| Rules (cargo off, 27.175 mm ceiling, top/bottom milling, 3 mm walls, one piece), exact watertight export | tested |
+| Air volume STEP (exact CAD + faceted pod), names surviving SimScale's import | tested on SimScale: team car and evolved designs import as one body with all names |
+| Simulation + mesh built from code, run on SimScale | tested: the team car meshed (5.7 M cells) and ran |
+| Campaign → SimScale (keys, retries, import re-tries) | smoke-tested on SimScale up to meshing |
+| Force reading | see the status line at the top |
 | Actions re-check | dry-run tested; a real dispatch has not run yet |
 | Whole car (nose, rear pods) and the 3 layout variables | **not built**; only the sidepod region is designable |

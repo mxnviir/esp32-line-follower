@@ -268,12 +268,12 @@ class SimScaleEvaluator(Evaluator):
             cfg = sdk.Configuration()
             cfg.host = os.environ.get("SIMSCALE_API_URL", "https://api.simscale.com") + "/v0"
             cfg.api_key = {"X-API-KEY": os.environ["SIMSCALE_API_KEY"]}
-    proxy = os.environ.get("HTTPS_PROXY") or os.environ.get("https_proxy")   # urllib3 ignores proxy env vars
-    if proxy:
-        cfg.proxy = proxy
-    ca = os.environ.get("SSL_CERT_FILE") or os.environ.get("REQUESTS_CA_BUNDLE")
-    if ca:
-        cfg.ssl_ca_cert = ca
+            proxy = os.environ.get("HTTPS_PROXY") or os.environ.get("https_proxy")   # urllib3 ignores proxy env vars
+            if proxy:
+                cfg.proxy = proxy
+            ca = os.environ.get("SSL_CERT_FILE") or os.environ.get("REQUESTS_CA_BUNDLE")
+            if ca:
+                cfg.ssl_ca_cert = ca
             api_client = sdk.ApiClient(cfg)
             api_client.rest_client.pool_manager.connection_pool_kw["timeout"] = 120
         self.api = api_client

@@ -169,6 +169,16 @@ external topology case was **not found** in their material (that is not proof it
   with gentler downloads). Swap works only on `/tmp` (17 GB; it's re-created on restart, as `/tmp`
   is wiped when the codespace stops). Main disk 4.4 GB free for CFD runs: watch it. Plan: one seed
   (`original`) once the 3-pair check passes.
+- **2026-11-20 18:45, STOP: do not run `shape_loop.py` as it stands (dry run with the real gradient, no CFD).**
+  From the `original` seed, a 1.5 mm step flips **18 voxels** of a 67,000 mm³ pod; a 0.75 mm step
+  flips **none**. Causes: (1) the step is normalised by max|g|, and the gradient has a hot spot (the
+  median surface cell is 0.7 % of the max, the 99th percentile 24 %); (2) the field is the EDT
+  difference of binary voxels, which jumps from −1 to +1 across the surface, so nothing moves until
+  a cell changes by a full 1 mm, and all sub-voxel progress is erased at each re-initialisation;
+  (3) the objective is drag only, while at the weight floor foam costs 1.22 ms per cm³, the same
+  order as the drag sensitivity. Fix in progress in the cloud session (sub-voxel surface from the
+  continuous field, percentile-normalised clipped step, race-time objective with the mass price,
+  morph-first meshing). Wait for the commit "shape_loop v2".
 
 ## Sources
 

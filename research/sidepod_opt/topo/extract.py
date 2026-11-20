@@ -48,6 +48,25 @@ def latest_time(case: Path) -> str:
     return max(ts, key=float)
 
 
+def race_references(car, rm, res):
+    """Race time of the team's original and of the car with no sidepod, body-fitted at the same mesh level."""
+    refs = {}
+    ob = json.loads((SP / f"gate_results_{res}" / "base.json").read_text()) if res != "medium" else \
+        json.loads((SP / "gate_results" / "base.json").read_text())
+    if "full_D20_N" in ob:
+        T, _ = rm(ob["full_D20_N"], ob["full_L20_N"], car.mass(car.body_mesh))
+        refs["original"] = {"D20_N": ob["full_D20_N"], "L20_N": ob["full_L20_N"], "race_time_s": T}
+    lp = HERE / f"lean_bodyfitted_{res}.json"
+    if lp.exists():
+        lj = json.loads(lp.read_text())
+        B, rep = car.mill(car.finish(np.full(car.body0.shape, -1.0)))
+        B, _ = car.min_wall(B, rep)
+        m = car.mass(car.body_mesh_for(B))
+        T, _ = rm(2 * lj["D20_half_N"], 2 * lj["L20_half_N"], m)
+        refs["no_sidepod"] = {"D20_N": 2 * lj["D20_half_N"], "L20_N": 2 * lj["L20_half_N"], "race_time_s": T}
+    return refs
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("case")
@@ -82,8 +101,16 @@ def main():
         rep["mass"] = b["mass"]; rep["folder"] = str(out)
         if a.cfd:
             import gate
+            from objective import RaceModel
             half, health, secs = gate.solve(out, 4, 2000, extra={"resolution": a.res})
-            rep["cfd"] = {"D20_half_N": float(half.D20), "wall_s": secs, "converged": bool(health.converged)}
+            full = half.to_full_car()
+            rm = RaceModel(car.s)
+            T, _ = rm(float(full.D20), float(full.L), b["mass"])
+            rep["cfd"] = {"D20_N": float(full.D20), "L20_N": float(full.L), "wall_s": secs,
+                          "converged": bool(health.converged), "race_time_s": T}
+            rep["references"] = race_references(car, rm, a.res)
+            for k, r in rep["references"].items():
+                rep["cfd"][f"dT_vs_{k}_ms"] = (T - r["race_time_s"]) * 1e3
     (case / f"extract_t{t}.json").write_text(json.dumps(rep, indent=1, default=float))
     print(json.dumps(rep, default=float)[:1500])
 

@@ -3,3 +3,5 @@ car_coarse*/
 lean_car/
 *.log
 *.out
+kat_*/
+opt_*/

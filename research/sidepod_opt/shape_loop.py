@@ -19,7 +19,9 @@ One iteration, design field f (mm, + = foam, slope 1, the 1 mm grid of geometry.
      changed nothing the surface comes from f_try itself (sub-voxel), elsewhere from the milled voxels
   3. coarse real-wall solve, steady scheme (CFD_DIV_U): the last accepted mesh reshaped onto the new
      body (low noise; a fresh mesh if the reshaped one fails checkMesh), warm-started from its flow
-  4. accept only if the solve converged and race time fell; else halve the step and retry
+  4. accept only if the solve converged on the morphed mesh (a fresh-mesh fallback is not comparable)
+     and race time fell by more than the margin (0.4 mN of drag, whole car: the pairs show a
+     ~0.1 mN half-car morph offset/curvature); else halve the step and retry
   5. on accept: DAFoam Krylov adjoint -> dD/dn per surface point -> grid (mirrored, region only)
 Every step logs the first-order prediction next to the measured change: a running gradient check.
 The level set can merge and split pods; it does not open a hole in solid on its own, and it only
@@ -98,6 +100,25 @@ def solve(folder: Path, iters: int, ref: str | None, n_sub: int) -> tuple[dict, 
              "force_osc": health.force_oscillation, "force_mean_stderr": getattr(health, "force_mean_stderr", None),
              "morph_fallback": bool(ref and (Path(run) / "MORPH_FALLBACK").exists()), "fresh_mesh": not ref,
              "wall_s": round(time.time() - t, 1), "div_U": os.environ["CFD_DIV_U"]}, run)
+
+
+def morph_drift(run: str, target_stl: Path) -> dict:
+    """How far the CFD's car surface is from the designed one: the run's car-patch mesh points
+    against the exported half-car STL (mm). A morphed mesh is smoothed (Part 2, 0.5 mm), so a large
+    drift means the CFD measured a smoother body than the one the next step starts from."""
+    try:
+        import trimesh
+        import openfoam_case as OC
+        pm = Path(run) / "constant" / "polyMesh"
+        start, n = OC.patch_range((pm / "boundary").read_text(), "car")
+        labels = OC.patch_mesh_points(OC.read_ascii_faces((pm / "faces").read_text()), start, n)
+        pts = OC.read_ascii_points((pm / "points").read_text())[labels]
+        m = trimesh.load(target_stl, process=True)
+        _, dist, _ = trimesh.proximity.closest_point(m, pts)
+        return {"drift_mean_mm": float(dist.mean() * 1e3), "drift_p99_mm": float(np.quantile(dist, 0.99) * 1e3),
+                "drift_max_mm": float(dist.max() * 1e3)}
+    except Exception as e:                                         # a diagnostic only
+        return {"drift_error": repr(e)[:200]}
 
 
 def adjoint(run_dir: str, case: Path, n_proc: int, env: dict) -> dict:
@@ -293,7 +314,7 @@ def cmd_init(a):
     np.savez_compressed(run / "current.npz", f=b["f_rules"])          # a true distance field, rules folded in
     cfg = {"seed": a.seed, "step_mm": a.step_mm, "step_min_mm": a.step_min_mm, "sigma_mm": a.sigma_mm,
            "iters_cold": a.iters_cold, "iters_warm": a.iters_warm, "np": a.np, "div_U": os.environ.get("CFD_DIV_U", STEADY_DIV_U),
-           "version": 2}
+           "accept_margin_mN": a.accept_margin_mN, "version": 2}
     (run / "config.json").write_text(json.dumps(cfg, indent=1))
     (run / "state.json").write_text(json.dumps({"it": 0, "step_mm": a.step_mm, "T_current": None, "D_current": None,
                                                 "run_current": None, "mass_current": None, "grad_ready": False}, indent=1))
@@ -382,8 +403,13 @@ def cmd_run(a):
                 if st["T_current"] is not None:
                     rec.update(dT_ms=(T - st["T_current"]) * 1e3, dD_mN=(cfd["D20_N"] - st["D_current"]) * 1e3)
             first = st["T_current"] is None
+            if rdir:
+                rec.update(morph_drift(rdir, folder / "_body_half.stl"))
+            margin = cfg["accept_margin_mN"] * 1e-3 * rm(st["D_current"], st["L_current"], st["mass_current"])[1]["drag_20_n"] \
+                if not first else 0.0
             why = ("solve failed" if T is None else "not converged" if not (cfd["converged"] or first)
-                   else "race time not lower" if (not first and T >= st["T_current"]) else None)
+                   else "fresh mesh (not comparable with the morph lineage)" if (not first and cfd.get("morph_fallback"))
+                   else "race time not lower by the margin" if (not first and T >= st["T_current"] - margin) else None)
             if why:
                 rec.update(accepted=False, why=why)
                 st["step_mm"] *= 0.5
@@ -434,7 +460,8 @@ def main():
     ap.add_argument("--seed", default="original", choices=["original", "lean", "blend", "block", "channel"])
     ap.add_argument("--step_mm", type=float, default=1.5)
     ap.add_argument("--step_min_mm", type=float, default=0.1)
-    ap.add_argument("--sigma_mm", type=float, default=2.0)
+    ap.add_argument("--sigma_mm", type=float, default=4.5)     # the gate checked ~10 mm bumps; coarse surface ~4 mm
+    ap.add_argument("--accept_margin_mN", type=float, default=0.4)   # whole car: morph offset / curvature seen in the pairs
     ap.add_argument("--iters_cold", type=int, default=2500)
     ap.add_argument("--iters_warm", type=int, default=1200)
     ap.add_argument("--np", type=int, default=4)

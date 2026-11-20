@@ -208,6 +208,22 @@ external topology case was **not found** in their material (that is not proof it
     The first-order prediction for the first 1.5 mm step is −69 mN whole car (−15 %), far more than
     a linear model can be trusted for; the measured value of step 1 is the first real test of
     the method at design scale.
+- **2026-11-20 19:00, v2 additions and the early production ranking check (rule fixed before any result).**
+  - Smoothing σ 2 → 4.5 mm (the gate validated ~10 mm bumps; the coarse car patch has 3,457 points).
+  - Accept margin: race time must fall by the equivalent of 0.4 mN whole-car drag. The pair
+    half-sums show a −0.03 / −0.12 mN half-car morph offset or curvature, and noise is 0.0025 mN,
+    so a bare "T lower" would accept slightly worse steps late in a run.
+  - A step that falls back to a fresh mesh is rejected: it isn't comparable with the morph lineage.
+  - `morph_drift`: the morphed CFD car surface against the designed STL, logged every step.
+  - `run_loop_here.sh`: one iteration at a time, commit after each, resumes after a restart.
+  - **Early production ranking check.** After 2–3 accepted steps, morph production state A
+    (`gate/refA_coarse`, linearUpwind, no `CFD_DIV_U`) onto the current best car, solve 1,000
+    iterations, and compare with the committed production zero run (`gate_results_coarse/zero.json`,
+    181.58 mN half car, stderr 0.44 mN).
+    - **Pass:** the production change has the same sign as the steady model's cumulative change
+      from the seed, and |change| ≥ 3σ (≈ 1.5 mN half car; σ from both runs' stderr).
+    - **Fail** (opposite sign at ≥ 3σ): stop the loop. The steady model is misranking.
+    - **Inconclusive** (< 3σ): continue, and repeat after more accepted steps.
 
 ## Sources
 

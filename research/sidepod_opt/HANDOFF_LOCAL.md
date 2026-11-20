@@ -49,10 +49,12 @@ The owner's words: "I don't care about tunnels specifically, I just care about h
 aerodynamic thing." Drag is judged by real-wall turbulent CFD (OpenFOAM, k-ω SST, rolling road,
 rotating wheels, ~2.7×10⁵ Reynolds number).
 
-**Why drag only:** at the 48.2 g weight floor (T3.6) the race-time slopes for this car are
+**Why race time and not pure drag:** at the 48.2 g weight floor (T3.6) the race-time slopes for this car are
 0.18 ms per mN of drag and 7.5 ms per gram over the floor; the COM has no effect. Light designs
-get lead up to the floor, so below it the sidepod question is a pure drag question. (The race
-model is in `objective.py` if mass ever matters, e.g. a pod much bigger than the team's.)
+get lead up to the floor, so below it the sidepod question is a pure drag question. The team's
+pod has no lead left (foam 25.7 g makes the car exactly 48.2 g), so growing it costs 1.22 ms per
+cm³ (as much as 6.8 mN of drag). The loop therefore optimises race time (`objective.py`), which
+equals drag below the floor and prices extra foam above it.
 
 **Reference numbers** (coarse mesh, production schemes, whole car D20 at 20 m/s):
 team pod **0.362 N**, no pod **0.411 N**. Pods help on this car (~12 %), so the search is worth doing.
@@ -98,30 +100,63 @@ team pod **0.362 N**, no pod **0.411 N**. Pods help on this car (~12 %), so the 
 A level-set shape optimisation of the sidepod, driven by the DAFoam discrete adjoint on real
 walls, remeshed every step, every design projected onto what the mill can make.
 
+**Version 2 (2026-11-20 19:00).** v1 was stopped before it ran: a dry run with the real gradient
+moved 18 voxels per step (max-normalised step, binary-voxel field, drag only). Any run folder made
+by v1 is refused (`config.json` has no `"version": 2`); re-init it.
+
 **Design variable:** a field `f` on the car's 1 mm grid (`geometry.Car(h=1.0)`, STEP frame,
-mm), **positive = foam**. Only cells in `car.region` matter; the rest is the team's CAD.
+mm), **positive = foam**, a true signed distance (slope 1 across the surface). Only cells in
+`car.region` matter; the rest is the team's CAD.
+
+**Objective: race time** (Part 2's race model, `objective.RaceModel`): drag from CFD plus the exact
+mass of the design. At the weight floor foam is free while lead remains (lead swaps out); once the
+lead is gone, extra foam costs 1.22 ms per cm³. Drag is logged separately (`D20_N`), so a drag-only
+reading is always available; making drag the only objective is a one-line change in `cmd_run`.
 
 **One iteration:**
-1. **Candidate.** The first time it is the seed itself; afterwards `f_try = f_cur − step·g/max|g|`.
-2. **Build** (`Car.build`): `finish` (symmetrise, forced air: T7.9.2/T7.9.3 wheel wedges and the
-   halo zone, forced foam: T4.2 cargo, locked spine) → `mill` (Part 1's rule: air the cutter can't
-   reach becomes foam, sealed voids filled, loose pieces dropped) → `min_wall` (3 mm) → `check`
-   (one piece, nothing outside the region changed, cargo inside, T3.7 clearance, walls ≥ 3 mm) →
-   exact mesh (marching cubes clipped to the region, unioned with the exact CAD). Illegal → step halved.
+1. **Candidate.** The first time it is the seed itself; afterwards `f_try = f_cur − d` with
+   `d = step · clip(g / p95|g|, −1, 1)` (`step_field`). Here g is the race-time gradient per cell,
+   Gaussian-smoothed (σ = 4.5 mm), with gradient on moves the rules forbid zeroed (growth through the
+   legal block's faces, cargo foam). The 95th percentile on the surface band normalises it, so one
+   hot spot can't freeze the rest. The foam-volume price enters as a multiplier λ ∈ [0, 1.22 ms/cm³]
+   (0 while lead remains; otherwise the smallest value that stops the step adding volume, or the full
+   price if growth still pays).
+2. **Build** (`build_design`): symmetrise, then on the voxels: `finish` (forced air: T7.9.2/T7.9.3
+   wheel wedges and the halo zone, forced foam: T4.2 cargo, locked spine) → `mill` (Part 1's rule: air
+   the cutter can't reach becomes foam, sealed voids filled, loose pieces dropped) → `min_wall` (3 mm) →
+   `check` (one piece, nothing outside the region changed, cargo inside, T3.7 clearance, walls ≥ 3 mm).
+   The **surface** is cut from the continuous field wherever the rules left the voxels alone (sub-voxel
+   moves reach the CFD), from the milled voxels elsewhere; clipped to the region and unioned with the
+   exact CAD. `f_rules` (the field of what will actually be made, re-distanced at 4× resolution)
+   becomes the next `f`. Illegal → step halved.
 3. **Export** the car folder (`car_half.stl` in the car frame, wheels, `assembly.json`, mass).
-4. **Solve:** coarse real-wall OpenFOAM via `run_half_car_cfd`, `CFD_DIV_U="bounded Gauss upwind"`,
-   cold the first time (2,500 iterations), afterwards a fresh snappy mesh warm-started from the
-   last accepted run with `mapFields` (1,200 iterations).
-5. **Accept or reject:** if D20 is not lower than the current design's, reject, halve the step and
-   retry from the current design with the same gradient. Steps < 0.2 mm mean stop.
-6. **On accept:** re-initialise `f` as the signed distance of the **milled** body (this folds every
-   rule into the field), then the DAFoam adjoint on the accepted run.
+4. **Solve:** coarse real-wall OpenFOAM via `run_half_car_cfd`, `CFD_DIV_U="bounded Gauss upwind"`.
+   Cold and fresh-meshed the first time (2,500 iterations); afterwards the last accepted run's mesh is
+   **morphed** onto the new body and its flow mapped in (1,200 iterations), the gate's low-noise path.
+5. **Accept or reject.** Accept only if all of these hold:
+   - the solve converged;
+   - it stayed on the morphed mesh (a `MORPH_FALLBACK` fresh mesh isn't comparable);
+   - race time fell by more than a margin equal to 0.4 mN of whole-car drag (the pairs show a
+     ~0.1 mN half-car morph offset or curvature).
+
+   Otherwise halve the step and retry with the same gradient. Steps < 0.1 mm mean stop.
+6. **On accept:** the DAFoam adjoint on the accepted run (~40 min: colouring ~15, GMRES ~25).
 7. **Gradient to the grid** (`grid_gradient`): per DAFoam surface point, dD/dn = dD/dXs · n (n =
-   nearest vertex normal of the exported half-car STL), in N per mm; summed into the 1 mm cell
-   holding the point (and its mirror, since the car is symmetric), region only, then Gaussian
-   smoothing (σ = 2 mm). This is a crude Sobolev step that keeps the surface smooth.
+   nearest vertex normal of the exported half-car STL), in N per mm, into the 1 mm cell holding the
+   point and its mirror (whole-car units), region only, unsmoothed (smoothing happens in step 1).
 8. **Sign:** dD/dn > 0 means moving that bit outward adds drag, so the field there **decreases**
-   (the surface moves in). Hence `f − step·g`.
+   (the surface moves in). Hence `f − d`.
+
+**Logged every step:**
+- `pred_dD_mN` and `pred_dT_ms` (first order) next to the measured `dD_mN` and `dT_ms`: a running
+  gradient check at design scale;
+- `drift_mean_mm` / `drift_p99_mm`: how far the CFD's (morphed, smoothed) car surface is from the
+  designed one;
+- `rules_changed_mm3`, `pod_cm3`, `lead_g`, `lam_ms_per_cm3`.
+
+**Running it here or on a codespace:** `run_loop_here.sh <name> <seed>` runs one iteration at a time,
+commits after each, and resumes after a restart (swap and Docker back on). A `runs/<name>/STOP` file
+stops it cleanly.
 
 **What it can and can't do.** The surface can grow or carve anywhere in the region, and merge or
 split pods; a gap between two growing parts can close over into a channel. It does **not** open a
@@ -145,8 +180,9 @@ Pass: every clear pair (≥ 3σ) has the predicted sign, and predicted/measured 
 Judge: `dafoam/pair_judge.py`. (Full marks, for a longer check: Pearson r ≥ 0.9, signs ≥ 80 %.)
 
 **The open question:** the steady model is a smoothed flow model (+26 % drag). Its gradient helps
-only if it **ranks sidepod changes like the production model**. That is task 4, and no result may
-be called "faster than the team's pod" before it.
+only if it **ranks sidepod changes like the production model**. It is checked early, after 2–3
+accepted steps, by the rule in ROUTES.md (2026-11-20 19:00, "early production ranking check"),
+and again at the end (task 4). No result may be called "faster than the team's pod" before both.
 
 ## 5. Technical reference
 

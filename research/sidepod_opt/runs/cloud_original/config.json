@@ -1,0 +1,12 @@
+{
+ "seed": "original",
+ "step_mm": 1.5,
+ "step_min_mm": 0.1,
+ "sigma_mm": 4.5,
+ "iters_cold": 2500,
+ "iters_warm": 1200,
+ "np": 4,
+ "div_U": "bounded Gauss upwind",
+ "accept_margin_mN": 0.4,
+ "version": 2
+}

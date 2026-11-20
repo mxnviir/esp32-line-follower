@@ -265,8 +265,11 @@ def one_cycle(case, cols, zb, zt, primal, adjoint, warm):
     if not (case / "0" / "V").exists():
         sh("postProcess -func writeCellVolumes -time 0", case)
     V = sfield(case / "0" / "V")
-    direct = BETA_MAX * (U ** 2).sum(1) * V                          # the objective's own porous term
-    dJdb = sens + direct
+    # topologySens is a per-unit-volume density and already includes the objective's own porous
+    # term (betaMax |U|^2, via topOSensMultiplier -> dJdb): per-cell derivative = sens * V.
+    # (Before 2026-11-20 this used sens without V and added the direct term again: ~1e8 too large.)
+    direct = BETA_MAX * (U ** 2).sum(1) * V                          # for the record only
+    dJdb = sens * V
     if warm:                                                         # next cycle starts from this flow
         for f in FIELDS:
             if (case / "1" / f).exists():

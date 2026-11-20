@@ -63,6 +63,22 @@ external topology case was **not found** in their material (that is not proof it
 - **2026-11-20**: this file. Machine: 4 cores, 15 GB, Ubuntu 24.04, Docker client present (daemon
   not running yet), dl.openfoam.com and Docker Hub reachable. Next: install OpenFOAM v2412, start
   Docker, re-solve coarse state A.
+- **2026-11-20, set-up done.** OpenFOAM v2412 installed from dl.openfoam.com; Docker daemon
+  started; DAFoam image `dafoam/opt-packages:v5.1.1` pulled (one Docker Hub 429 on the first try);
+  Python deps in `/opt/py` (same pins as `codespace_gate.sh`). Bump geometry rebuilt here is
+  identical to the committed `gate_results/bumps.json`. Coarse state A re-solve started 14:58 UTC.
+- **2026-11-20, the topology check's bug, found in the OpenFOAM v2412 source.**
+  - `topologySens<solver>` is a **per-unit-volume** density: `sensitivityTopO` accumulates
+    `(U·Ua)·betaMax·interp'(beta)` + turbulence terms + the objective's own `dJdb` = `betaMax·|U|²`
+    (`incompressibleAdjointSolver::topOSensMultiplier`, `objectivePowerDissipation::update_dJdb`),
+    and nothing multiplies by the cell volume.
+  - `topo/mill_topo.py::one_cycle` used it as a per-cell derivative (no `V`), then **added the
+    objective's direct term again** (`BETA_MAX·|U|²·V`), which ESI had already included (in
+    per-volume form).
+  - So the predictions were too large by ~1/V (cells ~3×10⁻¹⁰–10⁻⁹ m³), matching the 10⁸ mismatch.
+    Correct: `dJ/dbeta_i = topologySens_i · V_i`, no extra direct term.
+  - The verdict on the topology adjoint stays **untested**; a re-check needs this fix and ≤ 1 mm
+    steps. It does not rescue the porous route: the misranking was measured with real walls.
 
 ## Sources
 

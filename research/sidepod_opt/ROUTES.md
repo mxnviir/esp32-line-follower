@@ -147,7 +147,7 @@ external topology case was **not found** in their material (that is not proof it
   5 mm bore through the team pod (pod 66.5 vs 67.5 cm³). Only open channels and grooves reachable
   from a set-up direction are buildable, so the search can't produce closed tunnels, by the rules
   of the process rather than any limit of the method. The open `channel` seed came out at 22.4 cm³
-  (more removed than the groove itself; to inspect).
+  (first version: the slot was oversized and cut the outer pod loose). Fixed: an 8 mm outboard groove (the 6.35 mm ball must fit; a 6 mm one was refilled), seed now 57.3 cm³ and buildable.
 
 ## Sources
 

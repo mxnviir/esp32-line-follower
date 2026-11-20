@@ -56,9 +56,9 @@ def seeds(car) -> dict:
     # cannot be made: the 3-axis mill (top, bottom, left, right set-ups) cannot reach a hole running
     # along x, and fills it (tested 2026-11-20: a 5 mm bore came back 98.5 % solid). Open grooves can.
     s = car.s
-    Ycen = 0.6 * s.region_ymax
+    Ycen = 0.8 * s.region_ymax
     Zcen = s.region_z[0] + 0.35 * (min(s.region_z[1], s.ceiling_mm or 1e9) - s.region_z[0])
-    r = 5.0
+    r = 4.0                                   # 8 mm groove: the 6.35 mm ball must fit
     d_axis = np.sqrt((np.abs(car.Y) - Ycen) ** 2 + (car.Z - Zcen) ** 2)
     d_slot = np.where(np.abs(car.Y) >= Ycen, np.abs(car.Z - Zcen), d_axis)    # the bore, opened to the side
     out["channel"] = np.minimum(car.sdf_original, d_slot - r).astype(float)

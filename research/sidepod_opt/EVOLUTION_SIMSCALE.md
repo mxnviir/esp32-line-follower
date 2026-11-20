@@ -134,20 +134,19 @@ The design side (`geometry.py`) is unchanged:
 7. **Build the exact surface** and weigh it (foam, lead, centre of mass).
 8. **Export** `cars/<id>/`: `body_mm.stl` (the body, STEP frame, mm), STLs for OpenFOAM, `mass.json`.
 
-**The SimScale air volume** (`simscale_step_domain.build_design`). SimScale's API cannot extract a flow volume, and it splits multi-solid STL uploads into pieces, so we send it the air itself, the way the team's Fusion add-in does:
+**The SimScale air volume** (`simscale_step_domain.build_faceted`). SimScale's API cannot extract a flow volume, and it splits multi-solid STL uploads into pieces, so we send it the air itself, the way the team's Fusion add-in does:
 
-| Part of the car | How it goes into the STEP |
+| Part | How it goes into the STEP |
 |---|---|
-| Everything outside the sidepod region | the team's **exact** B-rep, minus the exact region solid (OpenCASCADE Boolean) |
-| The designed sidepod (+y side) | triangles, reduced to about **4500** (measured error: 0.012 mm average, 0.2 mm worst), overlapping the kept CAD by 0.05 mm so there's no seam gap. The team's own sidepod is flat-faced: 82 triangles, exact. |
-| Wheels | exact B-rep |
-| Air | the half tunnel box minus all of the above, ONE solid |
+| The car body (half, +y) | the exact watertight body mesh (the same one OpenFOAM uses), reduced to **20,000** well-shaped triangles (pymeshlab quadric collapse: quality threshold, no flipped triangles, flat areas kept flat). Measured error vs the full mesh: **0.0002–0.0004 mm average**, 0.07–0.36 mm at the worst point. |
+| Wheels | exact B-rep from the team's STEP |
+| Air | the half tunnel box minus the above, ONE solid; road 0.15 mm under the wheels |
 
-Faces are named in the STEP (inlet, outlet, symmetry, side, top, ground, wheelF, wheelR; every other face is the car), and SimScale keeps the names. Checks before upload: one solid, all 8 names present, removed volume = car + wheels (±0.3 %).
+Faces are named in the STEP (inlet, outlet, symmetry, side, top, ground, wheelF, wheelR; every other face is the car), and SimScale keeps the names. Checks before upload: one solid (air sealed inside the body is dropped and logged), all 8 names present, removed volume = car + wheels (±0.3 %), worst shape error under 0.5 mm.
 
-Every car, **the team's included**, goes through the same route, so comparisons are like with like.
+**Why the whole body as triangles, not exact CAD plus a triangle pod.** We tried that first. SimScale's import (it reports why in `failureReason`) rejected about 2 in 3 such files: wherever triangles lie within hundredths of a millimetre of an exact CAD surface (the seam strip, the sidepod top plane) it finds "bad face-face" and "invalid edge" faults it cannot heal. One consistent triangle surface has no seams.
 
-**Imports SimScale refuses.** About 1 file in 3 is refused on import with no reason given, even though OpenCASCADE says it's valid. The same file always fails, so the evaluator rebuilds the pod with another triangle count (4500 → 5200 → 3900 → 6000 → 4200 → 6800) and tries again. That changes the shape by hundredths of a mm. In the smoke test, one design failed twice and passed on the third count.
+**Imports SimScale still refuses.** About 2 files in 5 fail with "fault-face-tessellation_failed" on a single face. The same file always fails, so the evaluator rebuilds the body with another triangle count (20k → 16k → 24k → 12k → 18k → 22k) and imports again: each try changes the shape by thousandths of a mm and takes 2–4 minutes. The reason is logged in `tries`. Mesh failures (e.g. "mesh too coarse" on a sliver) get the same treatment.
 
 **Per car, the evaluator (`simscale_step_eval.py`) walks:**
 
@@ -230,7 +229,7 @@ Each batch goes up as a release asset; results come back as workflow artifacts. 
 | `status` shows `capacity: 0` | every key has used its runs: add keys (section 6) |
 | a key `retired` with a quota/401 message | that account is out of credit or the key was reset; its cars move to the next key |
 | a car stuck with `last_error` | read the message: a proxy/network error clears itself; anything else is a bug to fix (the car is not blamed) |
-| "import refused 6 times" | a rare pod SimScale won't take at any triangle count; the design counts as failed |
+| "import refused 6 times" | a body SimScale won't take at any triangle count (rare); the design counts as failed. `tries` has SimScale's reasons |
 | "named faces missing after import" | the STEP lost its face names (check `simscale_step_domain.write_step`) |
 | "too expensive" in `designs.jsonl` | the estimate exceeded `max_cost` (core-hours) |
 | Everything illegal | read `check` in `designs.jsonl`: thin foam or pieces usually means the step size is too large (lower CMA `"sigma"`) |
@@ -240,7 +239,7 @@ Each batch goes up as a release asset; results come back as workflow artifacts. 
 | Part | Status |
 |---|---|
 | Rules (cargo off, 27.175 mm ceiling, top/bottom milling, 3 mm walls, one piece), exact watertight export | tested |
-| Air volume STEP (exact CAD + faceted pod), names surviving SimScale's import | tested on SimScale: team car and evolved designs import as one body with all names |
+| Air volume STEP (whole half body as 20k triangles + exact wheels), names surviving SimScale's import | tested on SimScale: evolved designs import as one body with all names (about 3 in 5 on the first triangle count) |
 | Simulation + mesh built from code, run on SimScale | tested: the team car meshed (5.7 M cells) and ran |
 | Campaign → SimScale (keys, retries, import re-tries) | smoke-tested on SimScale up to meshing |
 | Force reading | see the status line at the top |

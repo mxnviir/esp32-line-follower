@@ -1,0 +1,39 @@
+{
+ "stage": 0,
+ "runs": {
+  "evolve:cma:original:s1": {
+   "used": 6,
+   "illegal": 2,
+   "best": null
+  }
+ },
+ "inflight": {
+  "c00007": {
+   "run": "evolve:cma:original:s1",
+   "stage": "evolve"
+  },
+  "c00001": {
+   "run": "evolve:cma:original:s1",
+   "stage": "evolve"
+  },
+  "c00003": {
+   "run": "evolve:cma:original:s1",
+   "stage": "evolve"
+  },
+  "c00004": {
+   "run": "evolve:cma:original:s1",
+   "stage": "evolve"
+  },
+  "c00006": {
+   "run": "evolve:cma:original:s1",
+   "stage": "evolve"
+  },
+  "c00008": {
+   "run": "evolve:cma:original:s1",
+   "stage": "evolve"
+  }
+ },
+ "n": 9,
+ "log": [],
+ "ref:evolve": "c00000"
+}

@@ -1,0 +1,66 @@
+{
+ "keys": {
+  "2f32c2d544": {
+   "runs": 2,
+   "project": "669525764013223556",
+   "box": "20ec6925-3540-4c3e-a098-c943271532b4",
+   "retired": null
+  }
+ },
+ "cases": {
+  "c00007": {
+   "folder": "runs/simscale/cars/c00007",
+   "phase": "import",
+   "fp": "2f32c2d544",
+   "t0": 1795192242.027933,
+   "attempt": 0,
+   "import_id": "c8773e64-62d2-4181-8eb9-7cdd604c1412",
+   "project": "669525764013223556"
+  },
+  "c00001": {
+   "folder": "runs/simscale/cars/c00001",
+   "phase": "import",
+   "fp": "2f32c2d544",
+   "t0": 1795197326.944664,
+   "attempt": 0,
+   "import_id": "292fd718-31d8-4244-99b8-2a0ad47eeb57",
+   "project": "669525764013223556"
+  },
+  "c00003": {
+   "folder": "runs/simscale/cars/c00003",
+   "phase": "import",
+   "fp": "2f32c2d544",
+   "t0": 1795197326.9446657,
+   "attempt": 0,
+   "import_id": "835970c5-e3c7-4bfb-85d8-780623437a13",
+   "project": "669525764013223556"
+  },
+  "c00004": {
+   "folder": "runs/simscale/cars/c00004",
+   "phase": "import",
+   "fp": "2f32c2d544",
+   "t0": 1795197326.9446666,
+   "attempt": 0,
+   "import_id": "4adcea27-508a-4658-b4f4-d6e851b92dba",
+   "project": "669525764013223556"
+  },
+  "c00006": {
+   "folder": "runs/simscale/cars/c00006",
+   "phase": "import",
+   "fp": "2f32c2d544",
+   "t0": 1795197326.9446669,
+   "attempt": 0,
+   "import_id": "3a927b95-2a6b-4d59-a33f-bd30169cdac1",
+   "project": "669525764013223556"
+  },
+  "c00008": {
+   "folder": "runs/simscale/cars/c00008",
+   "phase": "import",
+   "fp": "2f32c2d544",
+   "t0": 1795197326.9446676,
+   "attempt": 0,
+   "import_id": "b7aa8e7b-4f50-41de-9ef1-94b9f01d5265",
+   "project": "669525764013223556"
+  }
+ }
+}

@@ -37,7 +37,8 @@ n=$(echo $SEEDS | wc -w); need=$((24 * n)); have=$(free -g | awk '/Mem/{print $2
 if [ "$have" -lt "$need" ] && ! swapon --show | grep -q swapfile; then
   sudo fallocate -l $((need - have + 8))G /swapfile && sudo chmod 600 /swapfile && sudo mkswap /swapfile && sudo swapon /swapfile
 fi
-free -g; swapon --show; nproc
+free -g; swapon --show; nproc; df -h / /tmp /workspaces
+[ -n "$SETUP_ONLY" ] && { echo "SETUP_DONE $(date -u)"; exit 0; }
 
 source /usr/lib/openfoam/openfoam2412/etc/bashrc
 export OMPI_MCA_rmaps_base_oversubscribe=1 CFD_DIV_U="bounded Gauss upwind"

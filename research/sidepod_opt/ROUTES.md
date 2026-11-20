@@ -298,6 +298,34 @@ external topology case was **not found** in their material (that is not proof it
   chamfered, the inboard leading face filled, the rear lower outboard corner tapered towards the
   rear wheel (boat-tail), and a scoop cut at x ≈ 145–155 mm from the nose; mid-width sides bulge a
   few tenths, and the outermost flank is pulled in.
+- **2026-11-20 23:56, run `cloud_original` (seed: the team's pod) CONVERGED to a local optimum.**
+
+  | it | step | D20 whole car (steady) | race time | result |
+  |---|---|---|---|---|
+  | 0 | seed | 449.24 mN | 0.76486 s | accepted (fresh mesh) |
+  | 1 | 1.5 mm | 432.25 | 0.76319 | accepted |
+  | 2 | 1.5 mm | 429.13 | | rejected: morph failed (fresh mesh) |
+  | 3 | 0.75 mm | 428.90 | 0.76244 | accepted |
+  | 4 | 0.75 mm | 427.09 | 0.76151 | accepted; adjoint stalled (morphed mesh) |
+  | 5 | 0.75 mm | 428.26 | | re-based (it 4 on a fresh mesh: 423.85); rejected (+4.4, stale gradient) |
+  | 6 | 0.375 mm | 421.83 | 0.76027 | accepted; adjoint converged on the re-based mesh |
+  | 7 | 0.375 mm | 419.18 | 0.75982 | accepted |
+  | 8 | 0.375 mm | **416.05** | **0.75927** | accepted, **best** |
+  | 9 | 0.375 mm | 416.99 | | rejected |
+  | 10 | 0.19 mm | 415.85 | | rejected: −0.19 mN, under the 0.4 mN margin; step < 0.1 mm → stop |
+
+  - **Best (it 8) vs the team's pod, steady model:** −33.2 mN whole car (**−7.4 %**), race time
+    **−5.6 ms**. Mass +0.06 g (69.41 g), pod 67.5 → 68.7 cm³. Fresh-vs-fresh check at it 4
+    (−25.4 mN against the lineage's −22.2) says the gains aren't a morph artefact.
+  - **Lessons:**
+    - adjoints converge on fresh or lightly morphed meshes and can stall after several morphs;
+      re-basing fixes both the morph failures and the stalls;
+    - measured/predicted runs 0.3–0.7: curvature, so the step control matters;
+    - with the 0.4 mN margin the run ends once a step's gain drops below ~0.4 mN.
+  - **Next, on this machine:** the production check of it 8's car (`prodcheck_best_it8`, coarse,
+    morphed from production state A; it may fall back to a fresh mesh this far from the seed, which
+    is then noisier), and run **`cloud_lean`** (seed: no pod, 10 g of lead available, so foam is
+    free at first): can it grow a pod of its own, and how does it compare with the team's?
 
 ## Sources
 

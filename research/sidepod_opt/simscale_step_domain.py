@@ -25,7 +25,8 @@ import trimesh
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
-DOMAIN_MM = ((-771.0, 0.0, 0.0), (2314.0, 192.0, 245.0))         # Part 2's half tunnel for this car
+GROUND_MM = -0.15            # the road: 0.15 mm under z = 0, so the wheels (bottom at -0.3 mm) sink 0.15 mm
+DOMAIN_MM = ((-771.0, 0.0, GROUND_MM), (2314.0, 192.0, 245.0))   # Part 2's half tunnel for this car
 
 
 def stl_solid(mesh_mm):
@@ -167,10 +168,61 @@ def write_step(fluid, labels, out: Path):
     assert w.Write(str(out)) == IFSelect_RetDone, "STEP write failed"
 
 
+def to_car_frame(shape, x_nose_mm):
+    """STEP frame -> car frame (mm): x from the nose tip (x' = x_nose - X), flow +x. A mirror."""
+    from OCP.BRepBuilderAPI import BRepBuilderAPI_Transform
+    from OCP.gp import gp_Ax2, gp_Dir, gp_Pnt, gp_Trsf
+    tr = gp_Trsf(); tr.SetMirror(gp_Ax2(gp_Pnt(x_nose_mm / 2.0, 0, 0), gp_Dir(1, 0, 0)))
+    return BRepBuilderAPI_Transform(shape, tr, True).Shape()
+
+
+def build_exact(out: Path, spec=None, domain=DOMAIN_MM):
+    """The team's car exactly as in its STEP (no triangles): body and the +y wheels cut from the tunnel."""
+    from OCP.BRepAlgoAPI import BRepAlgoAPI_Cut
+    from OCP.BRepPrimAPI import BRepPrimAPI_MakeBox
+    from OCP.OCP.collections import List_TopoDS_Shape
+    from OCP.gp import gp_Pnt
+    import cadio as CI
+    from geometry import CarSpec
+    t0 = time.time()
+    s = spec or CarSpec()
+    solids = CI.read_step_solids(s.step)
+    body = to_car_frame(CI.outer_solid(solids[s.body_solid]), s.x_nose_mm)
+    wheel_s = {"wheelF": to_car_frame(solids["wheel_fl"], s.x_nose_mm), "wheelR": to_car_frame(solids["wheel_rl"], s.x_nose_mm)}
+    (x0, y0, z0), (x1, y1, z1) = domain
+    box = BRepPrimAPI_MakeBox(gp_Pnt(x0, y0, z0), gp_Pnt(x1, y1, z1)).Shape()
+    cut = BRepAlgoAPI_Cut()
+    args, tools = List_TopoDS_Shape(), List_TopoDS_Shape()
+    args.Append(box)
+    for sh in [body, *wheel_s.values()]:
+        tools.Append(sh)
+    cut.SetArguments(args); cut.SetTools(tools); cut.SetFuzzyValue(1e-5); cut.Build()
+    assert cut.IsDone(), "Boolean failed"
+    fluid = cut.Shape()
+    removed = (x1 - x0) * (y1 - y0) * (z1 - z0) - volume(fluid)
+    expect = 0.5 * volume(body) + sum(volume(w) for w in wheel_s.values())
+    labels = label_faces(fluid, cut, wheel_s, domain)
+    write_step(fluid, labels, out)
+    counts = {}
+    for n in labels.values():
+        counts[n] = counts.get(n, 0) + 1
+    from OCP.TopAbs import TopAbs_FACE
+    from OCP.TopExp import TopExp_Explorer
+    nf = 0; ex = TopExp_Explorer(fluid, TopAbs_FACE)
+    while ex.More():
+        nf += 1; ex.Next()
+    return {"step": str(out), "removed_mm3": removed, "expected_mm3": expect, "removed_share": removed / expect,
+            "faces_total": nf, "named": counts, "ground_mm": z0, "secs": round(time.time() - t0)}
+
+
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("folder"); ap.add_argument("--out", default=None)
+    ap.add_argument("folder", help="car folder (faceted car) or 'exact' (the team's STEP as is)")
+    ap.add_argument("--out", default=None)
     a = ap.parse_args()
+    if a.folder == "exact":
+        print(json.dumps(build_exact(Path(a.out or "domain_exact.step")), default=float))
+        return
     out = Path(a.out) if a.out else Path(a.folder) / "domain.step"
     print(json.dumps(build(Path(a.folder), out), default=float))
 

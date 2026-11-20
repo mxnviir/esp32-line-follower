@@ -5,3 +5,4 @@ lean_car/
 *.out
 kat_*/
 opt_*/
+car_*/

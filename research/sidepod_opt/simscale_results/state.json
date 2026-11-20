@@ -8,10 +8,6 @@
   }
  },
  "inflight": {
-  "c00008": {
-   "run": "evolve:cma:original:s1",
-   "stage": "evolve"
-  },
   "c00003": {
    "run": "evolve:cma:original:s1",
    "stage": "evolve"

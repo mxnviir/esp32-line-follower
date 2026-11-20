@@ -8,42 +8,22 @@
   }
  },
  "cases": {
-  "c00008": {
-   "folder": "runs/simscale/cars/c00008",
-   "phase": "run",
-   "fp": "2f32c2d544",
-   "t0": 1795197326.9446676,
-   "attempt": 5,
-   "project": "669525764013223556",
-   "import_id": "f7be22e4-2b27-4901-9e11-9c2f88f88ace",
-   "geometry_id": "7e2c6447-5070-4f9b-bd95-236988413b1c",
-   "sim_id": "ed602ce8-a045-4064-992e-1a13e08b532b",
-   "mesh_op": "daf050d6-107d-42af-a8b6-f8db4942221b",
-   "tries": [
-    "4500: mesh FAILED surface-meshing-size-smaller-than-tolerance-no-entities: The meshing failed because the mesh element size is too close to the cad tolerance of some entities. Try to improve (reduce) the model tolerance with your CAD tool, or make the mesh coarser. Otherwise",
-    "5200: mesh FAILED MSG_MESH_TOO_COARSE: The mesh could not be generated on the following entities B1_TE12742. Please try either of the following resolutions (by order of priority): (a) change the small feature suppression under Advanced Set",
-    "3900: mesh FAILED surface-meshing-size-smaller-than-tolerance-no-entities: The meshing failed because the mesh element size is too close to the cad tolerance of some entities. Try to improve (reduce) the model tolerance with your CAD tool, or make the mesh coarser. Otherwise",
-    "6000: import FAILED model-has-invalid-geometry ['fault-face-tessellation_failed']",
-    "4200: mesh FAILED surface-meshing-size-smaller-than-tolerance-no-entities: The meshing failed because the mesh element size is too close to the cad tolerance of some entities. Try to improve (reduce) the model tolerance with your CAD tool, or make the mesh coarser. Otherwise"
-   ],
-   "mesh_done": true,
-   "run_id": "1addf774-c689-4db1-9ba9-5c8baa5f9c53",
-   "cost_estimate": 16.82,
-   "progress": 0.875
-  },
   "c00003": {
    "folder": "runs/simscale/cars/c00003",
-   "phase": "step",
+   "phase": "mesh",
    "fp": "2f32c2d544",
    "t0": 1795215643.596087,
-   "attempt": 1,
-   "import_id": "42730e30-d036-4132-ae04-7e6068efc169",
+   "attempt": 4,
+   "import_id": "6f3b57d3-a269-48a3-a078-499ce940fc3d",
    "project": "669525764013223556",
-   "geometry_id": "3262fc7b-2aaf-40cb-a940-7b0be153a5d5",
-   "sim_id": "4c481b27-706d-4c00-ba3e-961056e43825",
-   "mesh_op": "969cabfb-0754-4254-89f4-f54968b673dc",
+   "geometry_id": "fd858ae2-f645-4d6b-aeca-82e22746a4ee",
+   "sim_id": "5e4fd0e8-66e4-48c0-b1fa-9bf15a33703f",
+   "mesh_op": "adfed7d4-639c-4fea-9c71-2f12cbfb7214",
    "tries": [
-    "4500: mesh FAILED surface-meshing-size-smaller-than-tolerance-no-entities: The meshing failed because the mesh element size is too close to the cad tolerance of some entities. Try to improve (reduce) the model tolerance with your CAD tool, or make the mesh coarser. Otherwise"
+    "4500: mesh FAILED surface-meshing-size-smaller-than-tolerance-no-entities: The meshing failed because the mesh element size is too close to the cad tolerance of some entities. Try to improve (reduce) the model tolerance with your CAD tool, or make the mesh coarser. Otherwise",
+    "5200: mesh FAILED surface-meshing-size-smaller-than-tolerance-no-entities: The meshing failed because the mesh element size is too close to the cad tolerance of some entities. Try to improve (reduce) the model tolerance with your CAD tool, or make the mesh coarser. Otherwise",
+    "3900: mesh FAILED surface-meshing-size-smaller-than-tolerance-with-position: The meshing failed because the mesh element size is too close to the cad tolerance of the following entities: B1_TE527. Position: [{\"X\":0.07166573052574544,\"Y\":-1.602925149384038E-17,\"Z\":0.01671880704",
+    "6000: mesh FAILED surface-meshing-size-smaller-than-tolerance-no-entities: The meshing failed because the mesh element size is too close to the cad tolerance of some entities. Try to improve (reduce) the model tolerance with your CAD tool, or make the mesh coarser. Otherwise"
    ]
   }
  },

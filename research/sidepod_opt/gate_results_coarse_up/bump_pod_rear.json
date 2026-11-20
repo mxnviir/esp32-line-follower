@@ -1,0 +1,13 @@
+{
+ "D20_half_N": 0.22718936132447212,
+ "wall_s": 1367.7,
+ "converged": true,
+ "residual_p": 1.7677245858180504e-05,
+ "force_osc": 0.00011419702821186026,
+ "force_drift": 1.4082127172906255e-06,
+ "run_dir": "",
+ "force_mean_stderr": 3.875663523276137e-06,
+ "bump": "pod_rear",
+ "morph_fallback": false,
+ "run_dir_kept": "/home/user/esp32-line-follower/part2-simulation/cfd_case_template/runs/run_863_8266cf74f927"
+}

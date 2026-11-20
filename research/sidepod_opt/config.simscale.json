@@ -19,7 +19,7 @@
     "fineness": 6,
     "box_mm": 1.5,
     "iters": 1000,
-    "max_cost": 20.0
+    "max_cost": 60.0
    },
    "starts": [
     "original"

@@ -33,6 +33,12 @@ FILL = int(os.environ.get("DAF_PC_FILL", "1"))
 # case; level 1 (phi 0) is far sparser: less memory, more GMRES iterations
 PC_LV = int(os.environ.get("DAF_PC_LEVEL", "1"))
 
+# Krylov (GMRES + PC matrix) needs a Jacobian colouring whose memory exceeded 40 GB on this 520 k-cell
+# case; fixedPoint iterates the adjoint with the primal's own segregated scheme: no colouring, no PC
+ADJ = os.environ.get("DAF_ADJ", "fixedPoint")
+FP_ITERS = int(os.environ.get("DAF_FP_ITERS", "2000"))
+FP_TOL = float(os.environ.get("DAF_FP_TOL", "1e-6"))
+
 daOptions = {
     "solverName": "DASimpleFoam",
     "designSurfaces": ["car"],
@@ -50,9 +56,11 @@ daOptions = {
             "scale": RHO,
         },
     },
-    "normalizeStates": {"U": U0, "p": U0 * U0 / 2.0, "k": K0, "omega": OMEGA0, "phi": 1.0},
+    "normalizeStates": {} if ADJ == "fixedPoint" else {"U": U0, "p": U0 * U0 / 2.0, "k": K0, "omega": OMEGA0, "phi": 1.0},
+    "adjEqnSolMethod": ADJ,
     "adjEqnOption": {"gmresRelTol": GMRES_TOL, "gmresAbsTol": 1.0e-16, "gmresMaxIters": GMRES_IT,
-                     "gmresRestart": GMRES_IT, "pcFillLevel": FILL, "jacMatReOrdering": "rcm"},
+                     "gmresRestart": GMRES_IT, "pcFillLevel": FILL, "jacMatReOrdering": "rcm",
+                     "fpMaxIters": FP_ITERS, "fpRelTol": FP_TOL, "fpMinResTolDiff": 1.0e12},
     "adjPCLag": 1,
     "maxResConLv4JacPCMat": {"pRes": PC_LV, "phiRes": max(PC_LV - 1, 0), "URes": PC_LV, "kRes": PC_LV, "omegaRes": PC_LV},
     "checkMeshThreshold": {"maxAspectRatio": 1000.0, "maxNonOrth": 70.0, "maxSkewness": 6.0,
@@ -100,7 +108,7 @@ def main():
         G = np.concatenate(allG).reshape(-1, 3)
         np.savez("dafoam_sens.npz", Xs=X, dD_dXs=G, D_N=D, primal_s=t1 - t0, adjoint_s=t2 - t1,
                  nproc=gcomm.size, gmres_tol=GMRES_TOL)
-        json.dump({"D_half_N": D, "n_surface_points": int(len(X)), "primal_s": t1 - t0, "adjoint_s": t2 - t1,
+        json.dump({"D_half_N": D, "adjoint_method": ADJ, "n_surface_points": int(len(X)), "primal_s": t1 - t0, "adjoint_s": t2 - t1,
                    "nproc": gcomm.size, "sum_dD_dXs": G.sum(0).tolist()}, open("dafoam_sens.json", "w"), indent=1)
         print(f"DAFOAM adjoint done: {len(X)} surface points, {t2 - t1:.0f} s", flush=True)
 

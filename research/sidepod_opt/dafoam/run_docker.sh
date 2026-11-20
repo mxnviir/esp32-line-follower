@@ -17,8 +17,9 @@ docker run --rm -u dafoamuser --shm-size=2g \
       renumberMesh -overwrite > log.renumberMesh 2>&1
       # the AD build reads ASCII only: convert mesh and fields once (controlDict says ascii)
       foamFormatConvert -constant > log.formatConvert 2>&1
+      rm -f *Coloring*.bin                   # colouring belongs to a mesh: kept across runs on the same one
       touch .renumbered
     fi
-    rm -rf processor* *Coloring*.bin
+    rm -rf processor*
     mpirun -np '"$NP"' python runScript.py 2>&1 | tee log.dafoam
   '

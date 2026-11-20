@@ -1,0 +1,5 @@
+tut_losses/
+car_coarse*/
+lean_car/
+*.log
+*.out

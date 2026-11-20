@@ -72,6 +72,7 @@ def main():
     ap.add_argument("--mode", default="optimise", choices=["optimise", "fixed_empty", "fixed_original"])
     ap.add_argument("--start", default="empty", choices=["empty", "half", "original"])
     ap.add_argument("--cap_mm3", type=float, default=None, help="half-car solid cap, mm3 (default: lead budget x margin)")
+    ap.add_argument("--alpha_from", default=None, help="start from this alpha field file (e.g. a cycle of another run)")
     ap.add_argument("--b", default=None, help="constant projection sharpness (default: ramp 2 -> 40)")
     ap.add_argument("--cycles", type=int, default=60)
     ap.add_argument("--radius", type=float, default=0.0025, help="filter radius, m")
@@ -116,6 +117,8 @@ def main():
         alpha[isd] = 0.5
     if a.mode == "fixed_original" or (a.mode == "optimise" and a.start == "original"):
         alpha[orig] = 1.0
+    if a.alpha_from:
+        alpha = scalar_field(Path(a.alpha_from))
     write_scalar_field(out / "0" / "alpha", "alpha", alpha, patches_of(out))
 
     # --- optimisationDict

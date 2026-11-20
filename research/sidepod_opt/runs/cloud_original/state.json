@@ -1,6 +1,6 @@
 {
- "it": 10,
- "step_mm": 0.1875,
+ "it": 11,
+ "step_mm": 0.09375,
  "T_current": 0.7592699600106931,
  "D_current": 0.4160476765223304,
  "run_current": "/home/user/esp32-line-follower/part2-simulation/cfd_case_template/runs/run_29322_444d27896cf8",

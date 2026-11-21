@@ -963,6 +963,14 @@ external topology case was **not found** in their material (that is not proof it
     the groove's drag jumps ~3 mN for a 0.2 mm change somewhere on the pod. Worth knowing before milling.
   - Groove vs team pod on medium (clean groove, team's 4 meshes): **−4.6 ± 0.3 mN**.
   - Design 8 next (same test), then team~1.
+- **2026-11-21 18:25, design 8 (the adjoint design) on clean repeat meshes: 178.32, 177.09, 178.44 mN.**
+  - Mean 177.95, sd 0.75. Mark of 16:05 (both shifted meshes within 1 mN of 178.3): **just missed**
+    (177.09 is 1.23 below); its mesh noise is about twice the team pod's and groove's.
+  - Its earlier 174.26 / 176.21 came from the `it8_p05/m05` copies, whose surfaces moved by up to
+    0.4–0.65 mm: like the groove, its drag shifts by several mN for sub-mm shape changes.
+  - **Design 8 vs team pod on medium: −1.8 ± 0.5 mN (~1 %)** (team 4 meshes, design 8 three clean).
+    The coarse mesh said −10.4. **Groove (clean): −4.6 ± 0.3 mN.** On medium the hand-placed groove
+    beats the 10-step adjoint design by ~2.8 mN.
 
 ## Sources
 

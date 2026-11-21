@@ -831,6 +831,12 @@ external topology case was **not found** in their material (that is not proof it
     13:40: designs with two flow states need ≥ 3 meshes before a verdict.
   - Against the team pod (SE from each design's own sd): groove **−3.9 ± 1.1 mN (3.4 SE, real)**;
     design 8 **−3.5 ± 1.2 mN (2.9 SE, borderline)**. On medium the two are indistinguishable.
+- **2026-11-21 14:31, campaign smoke test (coarse, short runs, not committed): every stage works end to end.**
+  - Found and fixed one bug: the launcher's strict-variable mode stopped at OpenFOAM's own bashrc.
+  - Forward run records cells (105 k) and y+; steady stage switches the scheme and applies mark A1;
+    the 6 bumps reshape the mesh with no fallback and reproduce last night's half-differences
+    (−1.50 / −0.70 / +0.25 mN vs −1.50 / −0.69 / +0.25); DAFoam takes the case and its primal reads
+    228.72 mN, the pipeline's own value. Next: `bccheck` (wall-resolved layers), then medium additions.
 
 ## Sources
 

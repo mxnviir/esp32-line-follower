@@ -681,6 +681,30 @@ external topology case was **not found** in their material (that is not proof it
     body pressure drag and give back about 9 mN at the wheels, a near wash on both meshes.
   - Controls A and B (coarse cold start; second medium meshes) are running; verdict on the
     adjoint number waits for them.
+- **2026-11-21 10:10, control A: the cause is mesh resolution, not the start state.**
+
+  | coarse mesh, production | warm start, 1,000 its | cold start, 2,000 its | body (pressure) cold |
+  |---|---|---|---|
+  | team pod | 180.85 mN | 180.71 | 33.1 (19.8) |
+  | adjoint design 8 | 170.48 | 170.46 | 22.7 (9.3) |
+  | difference | −10.4 | −10.3 | |
+
+  - Pass mark was "≤ −7 mN from a cold start means resolution": −10.3. The coarse mesh gives the
+    gain from any start, so the warm-started coarse figures stand as coarse-mesh figures.
+  - **Verdict:** the coarse mesh puts about 20 mN of pressure drag on the team pod's body; the
+    medium mesh puts 8 mN there. The adjoint removed drag that the coarse mesh invented. Its
+    design 8 is −1.5 mN on the medium mesh (pending control B's noise estimate), not −10 mN.
+  - **Withdrawn:** "production −4.5 to −5.7 % for design 8". Run `cloud_original` showed that the
+    loop works as an optimiser of its model; it did not produce a better pod.
+  - **Rule from now on:** no design loop and no search scoring on the coarse mesh. Coarse is for
+    plumbing tests only. The mesh a loop runs on must first pass a finer-mesh check of its
+    baseline's body/wheel drag split.
+  - **Open:** is the medium mesh itself converged? Queued: the "fine" mesh (surface levels 4–5)
+    for the team pod, the groove and design 8, cold start. Pass mark, fixed now: medium is
+    adequate if the team pod's body drag is within 3 mN of medium's 22.0 and both differences
+    against the team pod (groove −5.0, design 8 −1.5) are within 2 mN of their medium values.
+  - **Cost consequence:** the adjoint on the medium mesh (about 520k cells) doesn't fit this
+    16 GB machine (the 100k-cell coarse adjoint needed swap); it needs the 32 GB+ machine.
 
 ## Sources
 

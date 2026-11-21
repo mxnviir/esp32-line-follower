@@ -1,0 +1,20 @@
+{
+ "D20_half_N": 0.18003278743868292,
+ "wall_s": 2241.8,
+ "converged": true,
+ "residual_p": 0.002146919923401617,
+ "force_osc": 0.049488012327627465,
+ "force_drift": 0.0012643827931544463,
+ "run_dir": "",
+ "force_mean_stderr": 0.0016147058211189783,
+ "morph_fallback": false,
+ "folder": "runs/concepts/seed_p10/car",
+ "scheme": "production linearUpwind",
+ "mesh": "fresh",
+ "resolution": "medium",
+ "iterations": 2000,
+ "n_proc": 4,
+ "y_plus_min": 1.5998912272085724,
+ "y_plus_max": 117.72175768617505,
+ "n_cells": 520476
+}

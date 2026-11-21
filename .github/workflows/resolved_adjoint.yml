@@ -92,8 +92,9 @@ jobs:
             echo "workflow_dispatch: stage $I_STAGE"
             exit 0
           fi
-          echo "event payload file lists:"; jq -c '{head_commit: {added: .head_commit.added, modified: .head_commit.modified, removed: .head_commit.removed}, commits: [.commits[]? | {added, modified, removed}]}' "$GITHUB_EVENT_PATH" | head -c 1500; echo
-          P=$(jq -r '.head_commit.added[]?, .head_commit.modified[]?, (.commits[]?.added[]?), (.commits[]?.modified[]?)' "$GITHUB_EVENT_PATH" 2>/dev/null | grep -m1 '^\.github/resolved_adjoint_state' || true)
+          # GitHub leaves .head_commit.added/.modified null in push events, so read what the
+          # triggering commit actually changed from git itself (the checkout above is at HEAD).
+          P=$(git diff-tree --no-commit-id --name-only -r HEAD | grep -m1 '^\.github/resolved_adjoint_state' || true)
           if [ -z "$P" ] || [ ! -f "$P" ]; then
             out "stage=none"   # cleanup commit: every other job skips
             echo "no live launch state (head commit touched: '$P'); no-op run"

@@ -592,6 +592,18 @@ external topology case was **not found** in their material (that is not proof it
   - **Paper framing:** "best possible" isn't provable; defensible: the best found by a documented
     search at a stated budget, the map explaining each choice, ablations, finer-mesh and track
     confirmation.
+- **2026-11-21 06:30, fresh-mesh scatter of the production coarse model: σ = 0.32 mN half car.**
+  - The team pod unshifted and shifted by −0.05 / +0.05 / +0.10 mm (physical effect < 0.01 mN by
+    the adjoint; each shift gets its own snappy mesh): 180.85, 180.31, 180.33, 180.10 mN. Mean 180.40.
+  - Identical STLs give identical meshes: a plain repeat returned 180.85 to the digit, so plain
+    repeats measure nothing.
+  - Differences ≥ ~1.4 mN between two fresh-mesh designs are real at 3σ (σ√2 × 3). Significant
+    against the team pod: groove −5.5 mN, 3 windows +2.0, 5 windows +6.1, the adjoint design
+    −10.4, 90 % blend +4.6.
+  - **Window verdict (probe A's rule):** windows don't help on this mesh and model; drag rises with
+    their number. To re-check on a finer mesh before treating as final: 3 mm ribs are at the
+    coarse mesh's resolution limit.
+  - A production-scored global search can resolve ~1.5 mN (≈ 0.3 ms) per design, with no repeats needed.
 
 ## Sources
 

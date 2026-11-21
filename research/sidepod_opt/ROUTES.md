@@ -420,6 +420,50 @@ external topology case was **not found** in their material (that is not proof it
     the full `block` and the `channel` seed. It shows whether the landscape between "no pod" and
     "pod" is a smooth slope (then the steady model's compass is what failed) or has a plateau or
     valley (then no local method can cross it), and gives the first concept-scale scores.
+- **2026-11-21 05:45, objective = race time, including its gradients; ballast; whole-car scope (owner).**
+  - **Already in place:**
+    - every accept/reject in `shape_loop.py` uses Part 2's race model with CFD drag and lift plus
+      the exact mass;
+    - lead ballast tops the car up to 48.2 g automatically: in the T1.22 container under the halo,
+      up to 15.8 g (1.39 cm³); beyond that the car is illegal.
+  - **Added:** the step direction now carries the exact centre-of-mass gradient
+    (`objective.mass_cell_gradient`) on top of drag and the mass price. Logged as `com_grad_share`.
+    Effective for new runs. Lift is left out of the adjoint: its slope is −0.002 vs 0.188 s/N for drag.
+  - For this car the race model's COM slopes are exactly 0 (the thrust never lifts a wheel pair),
+    and pitch balance, guide friction and rolling are placeholders, never calibrated (APPROACH.md §4).
+    A layout optimum that leans on those terms can't be trusted until they're measured.
+- **Whole-car design rules from the owner (2026-11-21):**
+  - layout variables: halo x (`d_halo`), rear axle x, wheelbase (`W`; front axle = rear − W),
+    front wing x and z, rear wing x and z, nose cone x and z;
+  - **wings: NACA 0015, fixed section, no incidence (aoa 0)**; single element assumed (no flap)
+    until the owner says otherwise;
+  - nose cone, wing supports and the other printed parts: **ABS, FDM, 0.2 mm nozzle**
+    (Part 4 density 1.04 g/cm³; `BUILD_WALL_MM` is a placeholder until the team gives the
+    printer's minimum wall);
+  - objective: race time (Part 2 model) with exact mass, COM and ballast.
+- **Method for the whole car (route F):** the bilevel plan of APPROACH.md §3 and PARTS_PLAN.md,
+  updated with tonight's evidence.
+  - **Builder:** Part 5 `run_car.py` already builds a whole car from (`W`, `x_front`, `d_halo`) with
+    Part 1's body field, Part 4 parts (wings, nose, supports, ballast under the halo, ABS masses)
+    and the referee (`legality.py`); `part_ranges.py` gives each setting's legal range. Its body is
+    Part 1's parametric body, **not** the trial-car STEP that `sidepod_opt` works on. Joining them
+    is the first engineering task.
+  - **Outer loop:** TuRBO / Bayesian optimisation over the ~10 layout scalars. Each sample is a
+    fresh-meshed whole car, legality-checked, scored by **production** coarse CFD and race time
+    (~6 min on 2 cores). The steady model is not used here: it misjudges small changes, which is
+    what layout moves are. ~100–150 samples.
+  - **Inner loop:** at the incumbent layout, refine the body and sidepods with `shape_loop.py`
+    (steady-model adjoint, production check every 3 steps); grow the ABS supports by structural
+    topology optimisation (PARTS_PLAN.md).
+  - **Alternate** outer and inner 2–3 times, then medium mesh, then a physical test.
+  - **Concepts:** route E's production-scored exploration supplies the inner loop's starting body.
+  - **Optional hint:** layout slopes from the adjoint (sum dD/dXs over a part's points for a rigid
+    move). This needs the wings, nose and wheels as DAFoam design surfaces, and it comes from the
+    steady model, so it is a hint for the outer search, not its engine.
+  - **Before the outer loop:**
+    1. fresh-mesh repeatability (one car, 4–5 fresh meshes → σ: the smallest layout effect BO can see);
+    2. a wing Reynolds-number check (~20,000 on chord: steady k-ω SST is unreliable for the wings;
+       a transient or transition-model run on one wing position).
 
 ## Sources
 

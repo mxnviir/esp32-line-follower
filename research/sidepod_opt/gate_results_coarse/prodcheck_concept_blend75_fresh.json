@@ -1,0 +1,14 @@
+{
+ "D20_half_N": 0.20113487894451842,
+ "wall_s": 286.3,
+ "converged": true,
+ "residual_p": 0.0025052155207546385,
+ "force_osc": 0.018775511688474605,
+ "force_drift": 0.00044557907286905913,
+ "run_dir": "",
+ "force_mean_stderr": 0.0006629922588156663,
+ "morph_fallback": false,
+ "folder": "runs/concepts/blend75/car",
+ "scheme": "production linearUpwind",
+ "mesh": "fresh"
+}

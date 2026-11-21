@@ -261,8 +261,17 @@ def step_field(car, f, B, gD, mass, slopes, step_mm, sigma_mm) -> tuple[np.ndarr
     blocked = ((gD < 0) & ~can_grow) | ((gD > 0) & ndimage.binary_dilation(car.cargo))
     gD_all, gD = gD, np.where(blocked, 0.0, gD)
 
+    # the rest of the exact race-time gradient of foam at a surface cell: its effect on the centre of
+    # mass (and on the lead swap's COM), from objective.mass_cell_gradient; the mass PRICE itself is
+    # the multiplier lam below (it has a kink at the weight floor). Lift has no adjoint here: its
+    # slope is ~1 % of drag's (-0.002 vs 0.188 s/N) and the NACA 0015 wings sit at zero incidence.
+    from objective import mass_cell_gradient
+    lead_active = mass["lead_g"] > 0
+    com_part = mass_cell_gradient(car, mass, slopes) - (0.0 if lead_active else price)
+    com_part = np.where(surf, com_part * h ** 3 / h, 0.0)             # s per mm of outward move (cell face area h^2)
+
     def make(lam):
-        g = ndimage.gaussian_filter(sD * gD + lam * surf * h * h, sigma_mm / h) * car.region
+        g = ndimage.gaussian_filter(sD * gD + com_part + lam * surf * h * h, sigma_mm / h) * car.region
         norm = np.percentile(np.abs(g[band]), 95) if band.any() else 0.0
         d = step_mm * np.clip(g / norm, -1.0, 1.0) if norm > 0 else np.zeros_like(g)
         dV = float(((occupancy(car, f - d) - occ0) * car.region).sum() * h ** 3)
@@ -281,7 +290,8 @@ def step_field(car, f, B, gD, mass, slopes, step_mm, sigma_mm) -> tuple[np.ndarr
                 a, b = (lam, b) if dV > 0 else (a, lam)
             lam = b; d, dV, norm = make(lam)
     moved = np.abs(d[band]) if band.any() else np.zeros(1)
-    info = {"grad_blocked_share": float(np.abs(gD_all[blocked]).sum() / max(np.abs(gD_all).sum(), 1e-30)),
+    info = {"com_grad_share": float(np.abs(com_part).sum() / max(np.abs(sD * gD).sum(), 1e-30)),
+            "grad_blocked_share": float(np.abs(gD_all[blocked]).sum() / max(np.abs(gD_all).sum(), 1e-30)),
             "lam_ms_per_cm3": lam * 1e6, "price_ms_per_cm3": price * 1e6, "pred_dV_mm3": dV,
             "pred_dD_mN": float((gD * (-d)).sum() * 1e3),               # outward move = -d
             "pred_dT_ms": float((sD * (gD * (-d)).sum() + price * max(0.0, dV - mass["lead_g"] / 0.163e-3)) * 1e3),

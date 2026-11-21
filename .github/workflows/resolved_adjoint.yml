@@ -1,15 +1,29 @@
 name: resolved_adjoint
-run-name: "Wall-resolved normal-adjoint test (${{ inputs.stage }}, link ${{ inputs.link }})"
+run-name: "Wall-resolved normal-adjoint test (branch launch)"
 
 # RESOLVED_TEST.md as a distributed job graph (one GitHub runner per stage, meshes passed as
 # artifacts): proda = step 1a (resolved mesh with wall layers + production state A, 3000 cold
 # iterations; checkpoint-chains itself past the 6 h job cap), steady = step 1b (upwind
 # continuation + marks L and A1), bumpgeom + bumps = step 2 (six +/-1 mm bumps, parallel),
-# adjoint = step 3 (ESI frozen + sst, parallel), verdict = step 4 (marks unchanged) plus the
-# dated ROUTES.md entry and the push of results (never to main).
-# Repair dispatches: stage=bumps|adjoint|verdict + src_run=<run id hosting the state artifacts>
-# and sites/turbs subsets; stage=verdict verdict_runs="<run ids holding bump-*/esi-*>".
+# adjoint = step 3 (ESI frozen + sst, parallel), verdict = step 4 (same marks as the driver) plus
+# the dated ROUTES.md entry and the push of results (branch only, never main).
+#
+# Trigger: this workflow lives on the feature branch only, and workflow_dispatch cannot target a
+# workflow that is not on the default branch. Launching therefore works through commits to a state
+# file, and the run is driven by that state:
+#   launch / full campaign: commit .github/resolved_adjoint_state.json with {"stage": "all"}
+#   continue a checkpointed link (proda): the proda job commits that state file with
+#     {"stage": "all", "link": N, "ckpt_run": <run id>, ...} and pushes
+#   continue a checkpointed bump: the bump job commits
+#     .github/resolved_adjoint_state_bump_<site>.json with {"stage": "bumps", ...} and pushes
+#   repair by hand: commit a state file with {"stage": "bumps"|"adjoint"|"verdict", "src_run": <run
+#     id holding prodstate/steadystate/bumpgeom>, "sites": [...], "turbs": [...],
+#     "verdict_runs": "<run ids holding bump-*/esi-*>"}
+# Any push that touches the state glob but leaves no live state (cleanup deletes) is a no-op run.
 on:
+  push:
+    branches: [claude/dazzling-ritchie-3q792g]
+    paths: [".github/resolved_adjoint_state*"]
   workflow_dispatch:
     inputs:
       stage: { default: "all", description: "all | bumps | adjoint | verdict" }
@@ -38,9 +52,72 @@ env:
   GH_TOKEN: ${{ github.token }}
 
 jobs:
+  init:
+    name: "read the launch state"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      stage: ${{ steps.s.outputs.stage }}
+      link: ${{ steps.s.outputs.link }}
+      max_links: ${{ steps.s.outputs.max_links }}
+      ckpt_run: ${{ steps.s.outputs.ckpt_run }}
+      bump_ckpt_run: ${{ steps.s.outputs.bump_ckpt_run }}
+      src_run: ${{ steps.s.outputs.src_run }}
+      sites: ${{ steps.s.outputs.sites }}
+      turbs: ${{ steps.s.outputs.turbs }}
+      verdict_runs: ${{ steps.s.outputs.verdict_runs }}
+      NP: ${{ steps.s.outputs.NP }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: s
+        env:
+          EVENT: ${{ github.event_name }}
+          I_STAGE: ${{ inputs.stage }}
+          I_LINK: ${{ inputs.link }}
+          I_MAX_LINKS: ${{ inputs.max_links }}
+          I_CKPT_RUN: ${{ inputs.ckpt_run }}
+          I_BUMP_CKPT_RUN: ${{ inputs.bump_ckpt_run }}
+          I_SRC_RUN: ${{ inputs.src_run }}
+          I_SITES: ${{ inputs.sites }}
+          I_TURBS: ${{ inputs.turbs }}
+          I_VERDICT_RUNS: ${{ inputs.verdict_runs }}
+          I_NP: ${{ inputs.NP }}
+        run: |
+          out() { echo "$1" >> "$GITHUB_OUTPUT"; }
+          if [ "$EVENT" = workflow_dispatch ]; then
+            out "stage=${I_STAGE:-all}"; out "link=${I_LINK:-1}"; out "max_links=${I_MAX_LINKS:-8}"
+            out "ckpt_run=$I_CKPT_RUN"; out "bump_ckpt_run=$I_BUMP_CKPT_RUN"; out "src_run=$I_SRC_RUN"
+            out "sites=${I_SITES:-[\"pod_rear\",\"pod_rear_m\",\"pod_front_low\",\"pod_front_low_m\",\"pod_rear_top\",\"pod_rear_top_m\"]}"
+            out "turbs=${I_TURBS:-[\"frozen\",\"sst\"]}"; out "verdict_runs=$I_VERDICT_RUNS"; out "NP=${I_NP:-4}"
+            echo "workflow_dispatch: stage $I_STAGE"
+            exit 0
+          fi
+          P=$(jq -r '.head_commit.modified[]? // empty' "$GITHUB_EVENT_PATH" 2>/dev/null | grep -m1 '^\.github/resolved_adjoint_state' || true)
+          if [ -z "$P" ] || [ ! -f "$P" ]; then
+            out "stage=none"   # cleanup commit: every other job skips
+            echo "no live launch state (head commit touched: '$P'); no-op run"
+            exit 0
+          fi
+          echo "launch state: $P"
+          get() { jq -r "$1 // empty" "$P"; }
+          st=$(get .stage); [ -n "$st" ] || st=all
+          out "stage=$st"
+          v=$(get .link);      out "link=${v:-1}"
+          v=$(get .max_links); out "max_links=${v:-8}"
+          out "ckpt_run=$(get .ckpt_run)"; out "bump_ckpt_run=$(get .bump_ckpt_run)"; out "src_run=$(get .src_run)"
+          out "verdict_runs=$(get .verdict_runs)"
+          v=$(get .NP); out "NP=${v:-4}"
+          sc=$(jq -c '.sites // []' "$P" | tr -d '\n')
+          [ "$sc" = "[]" ] || [ -z "$sc" ] && sc='["pod_rear","pod_rear_m","pod_front_low","pod_front_low_m","pod_rear_top","pod_rear_top_m"]'
+          out "sites=$sc"
+          tc=$(jq -c '.turbs // []' "$P" | tr -d '\n')
+          [ "$tc" = "[]" ] || [ -z "$tc" ] && tc='["frozen","sst"]'
+          out "turbs=$tc"
+
   proda:
-    name: "1a mesh + production state A (link ${{ inputs.link }})"
-    if: inputs.stage == 'all'
+    name: "1a mesh + production state A (link ${{ needs.init.outputs.link }})"
+    needs: init
+    if: needs.init.outputs.stage == 'all'
     runs-on: ubuntu-24.04
     timeout-minutes: 350
     outputs:
@@ -52,6 +129,7 @@ jobs:
           sudo fallocate -l 10G /swapfile2 && sudo chmod 600 /swapfile2 && sudo mkswap /swapfile2 && sudo swapon /swapfile2
           free -m; df -h /
       - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
       - uses: actions/setup-python@v5
         with: { python-version: "3.11" }
       - name: OpenFOAM v2412 + python deps
@@ -63,13 +141,13 @@ jobs:
           test -d /usr/lib/openfoam/openfoam2412/tutorials
           pip install $PY_DEPS
       - name: continue a checkpointed link
-        if: inputs.ckpt_run != ''
+        if: needs.init.outputs.ckpt_run != ''
         run: |
-          gh run download "${{ inputs.ckpt_run }}" -R "${{ github.repository }}" -n ckpt-proda -D /tmp/ckpt
+          gh run download "${{ needs.init.outputs.ckpt_run }}" -R "${{ github.repository }}" -n ckpt-proda -D /tmp/ckpt
           mkdir -p /tmp/case && tar -xf /tmp/ckpt/case.tar -C /tmp/case
           echo "P2_RESUME_CASE=/tmp/case/run" >> "$GITHUB_ENV"
       - name: export the exact CAD (gate/original)
-        if: inputs.ckpt_run == ''
+        if: needs.init.outputs.ckpt_run == ''
         working-directory: research/sidepod_opt
         run: |
           python -W ignore - <<'PY'
@@ -83,7 +161,7 @@ jobs:
         id: solve
         working-directory: research/sidepod_opt
         env:
-          NP: ${{ inputs.NP }}
+          NP: ${{ needs.init.outputs.NP }}
         timeout-minutes: 325
         run: |
           mkdir -p gate gate_results_resolved
@@ -110,7 +188,7 @@ jobs:
             python -c "import json;d=json.load(open('gate_results_resolved/prodcheck_stateA.json'));print('cells %s y+ %s..%s D %.2f mN'%(d.get('n_cells'),d.get('y_plus_min'),d.get('y_plus_max'),d['D20_half_N']*1e3))"
           elif [ -s ../ckpt_path.txt ]; then
             echo "chained=true" >> "$GITHUB_OUTPUT"
-            echo "solve hit the job budget; case saved for link $(( ${{ inputs.link }} + 1 ))"
+            echo "solve hit the job budget; case saved for link $(( ${{ needs.init.outputs.link }} + 1 ))"
           else
             echo "prodcheck FAILED (rc $RC):"; grep -m5 -E "Error|FATAL|Traceback|FAILED" gate/prodcheck_link.log || tail -20 gate/prodcheck_link.log
             exit 1
@@ -123,15 +201,32 @@ jobs:
       - if: steps.solve.outputs.chained == 'true'
         uses: actions/upload-artifact@v4
         with: { name: ckpt-proda, path: ckpt/case.tar, retention-days: 3 }
-      - name: dispatch the next link
+      - name: dispatch the next link (commit the state file)
         if: steps.solve.outputs.chained == 'true'
+        env:
+          LINK: ${{ needs.init.outputs.link }}
+          MAX_LINKS: ${{ needs.init.outputs.max_links }}
+          SITES: ${{ needs.init.outputs.sites }}
+          TURBS: ${{ needs.init.outputs.turbs }}
+          NP: ${{ needs.init.outputs.NP }}
+          REPO: ${{ github.repository }}
+          BRANCH: ${{ github.ref_name }}
         run: |
-          if [ "${{ inputs.link }}" -ge "${{ inputs.max_links }}" ]; then
-            echo "not finished after ${{ inputs.max_links }} links"; exit 1
-          fi
-          gh workflow run resolved_adjoint.yml -R "${{ github.repository }}" --ref "${{ github.ref_name }}" \
-            -f link=$(( ${{ inputs.link }} + 1 )) -f max_links=${{ inputs.max_links }} -f ckpt_run=${{ github.run_id }} \
-            -f sites='${{ inputs.sites }}' -f turbs='${{ inputs.turbs }}' -f NP=${{ inputs.NP }}
+          if [ -z "$LINK" ] || [ "$LINK" -ge "$MAX_LINKS" ]; then echo "not finished (link limit $MAX_LINKS)"; exit 1; fi
+          git config user.name "mxnviir"; git config user.email "mxnviir@users.noreply.github.com"
+          ok=0
+          for i in 1 2 3 4; do
+            git pull -q --no-rebase --no-edit origin "$BRANCH" 2>/dev/null || true
+            printf '{"stage":"all","link":%s,"max_links":%s,"ckpt_run":"%s","sites":%s,"turbs":%s,"NP":"%s"}\n' \
+              "$(( LINK + 1 ))" "${MAX_LINKS:-8}" "$GITHUB_RUN_ID" "$(echo "$SITES" | python3 -c 'import json,sys;print(json.dumps(json.load(sys.stdin)))')" \
+              "$(echo "$TURBS" | python3 -c 'import json,sys;print(json.dumps(json.load(sys.stdin)))')" "${NP:-4}" > .github/resolved_adjoint_state.json
+            git add .github/resolved_adjoint_state.json
+            if git commit -q -m "resolved_adjoint: continue production state A (link $(( LINK + 1 )))"; then
+              if git push -q; then ok=1; break; fi
+            fi
+            sleep $((2 ** i))
+          done
+          [ "$ok" = 1 ] || { echo "chain push failed"; exit 1; }
       - name: release the state artifacts (mesh + flow + CAD)
         if: steps.solve.outputs.chained != 'true'
         run: |
@@ -144,6 +239,23 @@ jobs:
       - if: steps.solve.outputs.chained != 'true'
         uses: actions/upload-artifact@v4
         with: { name: carcad, path: carcad.tgz, retention-days: 7 }
+      - name: retract the launch state (campaign continues downstream; this file must not relaunch it)
+        if: steps.solve.outputs.chained != 'true'
+        env:
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          [ -f .github/resolved_adjoint_state.json ] || { echo "no launch state to retract"; exit 0; }
+          git config user.name "mxnviir"; git config user.email "mxnviir@users.noreply.github.com"
+          ok=0
+          for i in 1 2 3 4; do
+            git pull -q --no-rebase --no-edit origin "$BRANCH" 2>/dev/null || true
+            git rm -q .github/resolved_adjoint_state.json
+            if git commit -q -m "resolved_adjoint: production state A released (state retracted)"; then
+              if git push -q; then ok=1; break; fi
+            fi
+            sleep $((2 ** i))
+          done
+          echo "state retracted (ok=$ok); the retraction commit triggers one no-op run"
       - name: failure logs
         if: failure()
         uses: actions/upload-artifact@v4
@@ -151,8 +263,8 @@ jobs:
 
   bumpgeom:
     name: "2 bump geometry (mesh-independent)"
-    needs: proda
-    if: inputs.stage == 'all' && needs.proda.outputs.chained != 'true' && needs.proda.result == 'success'
+    needs: [init, proda]
+    if: needs.init.outputs.stage == 'all' && needs.proda.outputs.chained != 'true' && needs.proda.result == 'success'
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
@@ -162,7 +274,7 @@ jobs:
       - run: pip install $PY_DEPS
       - name: exact CAD from the production solve
         run: |
-          gh run download "${{ inputs.src_run || github.run_id }}" -R "${{ github.repository }}" -n carcad -D /tmp/carcad
+          gh run download "${{ needs.init.outputs.src_run || github.run_id }}" -R "${{ github.repository }}" -n carcad -D /tmp/carcad
           tar xzf /tmp/carcad/carcad.tgz -C research/sidepod_opt
       - name: make the six bumps (+1 mm, -1 mm at each site)
         working-directory: research/sidepod_opt
@@ -184,8 +296,8 @@ jobs:
 
   steady:
     name: "1b steady continuation + marks L, A1"
-    needs: proda
-    if: inputs.stage == 'all' && needs.proda.outputs.chained != 'true' && needs.proda.result == 'success'
+    needs: [init, proda]
+    if: needs.init.outputs.stage == 'all' && needs.proda.outputs.chained != 'true' && needs.proda.result == 'success'
     runs-on: ubuntu-24.04
     timeout-minutes: 350
     outputs:
@@ -210,13 +322,13 @@ jobs:
           pip install $PY_DEPS
       - name: production state from the meshing job
         run: |
-          gh run download "${{ inputs.src_run || github.run_id }}" -R "${{ github.repository }}" -n prodstate -D /tmp/ps
+          gh run download "${{ needs.init.outputs.src_run || github.run_id }}" -R "${{ github.repository }}" -n prodstate -D /tmp/ps
           tar xzf /tmp/ps/prodstate.tgz -C research/sidepod_opt
       - name: solve (3000 upwind-U iterations, wake steadiness test)
         id: solve
         working-directory: research/sidepod_opt
         env:
-          NP: ${{ inputs.NP }}
+          NP: ${{ needs.init.outputs.NP }}
         timeout-minutes: 330
         run: |
           mkdir -p gate_results_resolved_up
@@ -270,15 +382,15 @@ jobs:
 
   bumps:
     name: "2 bump ${{ matrix.site }}"
-    needs: [steady, bumpgeom]
+    needs: [init, steady, bumpgeom]
     if: >-
-      inputs.stage == 'bumps' ||
-      (inputs.stage == 'all' && needs.steady.outputs.a1 == 'true' && needs.steady.outputs.layers == 'true'
+      needs.init.outputs.stage == 'bumps' ||
+      (needs.init.outputs.stage == 'all' && needs.steady.outputs.a1 == 'true' && needs.steady.outputs.layers == 'true'
        && needs.bumpgeom.result == 'success')
     strategy:
       fail-fast: false
       matrix:
-        site: ${{ fromJSON(inputs.sites) }}
+        site: ${{ fromJSON(needs.init.outputs.sites) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 350
     steps:
@@ -288,6 +400,7 @@ jobs:
           sudo fallocate -l 10G /swapfile2 && sudo chmod 600 /swapfile2 && sudo mkswap /swapfile2 && sudo swapon /swapfile2
           free -m; df -h /
       - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
       - uses: actions/setup-python@v5
         with: { python-version: "3.11" }
       - name: OpenFOAM v2412 + python deps
@@ -300,22 +413,22 @@ jobs:
           pip install $PY_DEPS
       - name: steady state + bump STLs
         run: |
-          SRC="${{ inputs.src_run || github.run_id }}"
+          SRC="${{ needs.init.outputs.src_run || github.run_id }}"
           gh run download "$SRC" -R "${{ github.repository }}" -n steadystate -D /tmp/ss
           tar xzf /tmp/ss/steadystate.tgz -C research/sidepod_opt
           gh run download "$SRC" -R "${{ github.repository }}" -n bumpgeom -D /tmp/bg
           tar xzf /tmp/bg/bumpgeom.tgz -C research/sidepod_opt
       - name: continue a checkpointed bump
-        if: inputs.bump_ckpt_run != ''
+        if: needs.init.outputs.bump_ckpt_run != ''
         run: |
-          gh run download "${{ inputs.bump_ckpt_run }}" -R "${{ github.repository }}" -n ckpt-bump-${{ matrix.site }} -D /tmp/ckpt
+          gh run download "${{ needs.init.outputs.bump_ckpt_run }}" -R "${{ github.repository }}" -n ckpt-bump-${{ matrix.site }} -D /tmp/ckpt
           mkdir -p /tmp/case && tar -xf /tmp/ckpt/case.tar -C /tmp/case
           echo "P2_RESUME_CASE=/tmp/case/run" >> "$GITHUB_ENV"
       - name: solve (mesh reshaped onto the bump, warm start, 1500 iterations)
         id: solve
         working-directory: research/sidepod_opt
         env:
-          NP: ${{ inputs.NP }}
+          NP: ${{ needs.init.outputs.NP }}
           SITE: ${{ matrix.site }}
         timeout-minutes: 325
         run: |
@@ -354,13 +467,32 @@ jobs:
       - if: steps.solve.outputs.chained == 'true'
         uses: actions/upload-artifact@v4
         with: { name: "ckpt-bump-${{ matrix.site }}", path: ckpt/case.tar, retention-days: 3 }
-      - name: dispatch the continuation
+      - name: dispatch the continuation (commit the per-site state file)
         if: steps.solve.outputs.chained == 'true'
+        env:
+          SITE: ${{ matrix.site }}
+          SRC_RUN: ${{ needs.init.outputs.src_run }}
+          TURBS: ${{ needs.init.outputs.turbs }}
+          NP: ${{ needs.init.outputs.NP }}
+          REPO: ${{ github.repository }}
+          BRANCH: ${{ github.ref_name }}
         run: |
-          gh workflow run resolved_adjoint.yml -R "${{ github.repository }}" --ref "${{ github.ref_name }}" \
-            -f stage=bumps -f sites='["${{ matrix.site }}"]' -f src_run="${{ inputs.src_run || github.run_id }}" \
-            -f bump_ckpt_run=${{ github.run_id }} -f turbs='${{ inputs.turbs }}' -f NP=${{ inputs.NP }}
-          exit 1
+          git config user.name "mxnviir"; git config user.email "mxnviir@users.noreply.github.com"
+          ok=0
+          for i in 1 2 3 4; do
+            git pull -q --no-rebase --no-edit origin "$BRANCH" 2>/dev/null || true
+            printf '{"stage":"bumps","sites":["%s"],"src_run":"%s","bump_ckpt_run":"%s","turbs":%s,"NP":"%s"}\n' \
+              "$SITE" "${SRC_RUN:-$GITHUB_RUN_ID}" "$GITHUB_RUN_ID" \
+              "$(echo "$TURBS" | python3 -c 'import json,sys;print(json.dumps(json.load(sys.stdin)))')" "${NP:-4}" \
+              > ".github/resolved_adjoint_state_bump_$SITE.json"
+            git add ".github/resolved_adjoint_state_bump_$SITE.json"
+            if git commit -q -m "resolved_adjoint: continue bump $SITE"; then
+              if git push -q; then ok=1; break; fi
+            fi
+            sleep $((2 ** i))
+          done
+          [ "$ok" = 1 ] || { echo "chain push failed"; exit 1; }
+          exit 1   # this run's bump did not finish; the triggered run completes it
       - name: release the bump result
         if: steps.solve.outputs.chained != 'true'
         working-directory: research/sidepod_opt
@@ -373,6 +505,24 @@ jobs:
       - if: steps.solve.outputs.chained != 'true'
         uses: actions/upload-artifact@v4
         with: { name: "bump-${{ matrix.site }}", path: bump.tgz, retention-days: 14 }
+      - name: retract the per-site continuation state (if this run was one)
+        if: steps.solve.outputs.chained != 'true'
+        env:
+          SITE: ${{ matrix.site }}
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          [ -f ".github/resolved_adjoint_state_bump_$SITE.json" ] || { echo "no per-site state to retract"; exit 0; }
+          git config user.name "mxnviir"; git config user.email "mxnviir@users.noreply.github.com"
+          ok=0
+          for i in 1 2 3 4; do
+            git pull -q --no-rebase --no-edit origin "$BRANCH" 2>/dev/null || true
+            git rm -q ".github/resolved_adjoint_state_bump_$SITE.json"
+            if git commit -q -m "resolved_adjoint: bump $SITE finished (state retracted)"; then
+              if git push -q; then ok=1; break; fi
+            fi
+            sleep $((2 ** i))
+          done
+          echo "bump state retracted (ok=$ok)"
       - name: failure logs
         if: failure()
         uses: actions/upload-artifact@v4
@@ -380,14 +530,14 @@ jobs:
 
   adjoint:
     name: "3 ESI adjoint (${{ matrix.turb }})"
-    needs: [steady]
+    needs: [init, steady]
     if: >-
-      inputs.stage == 'adjoint' ||
-      (inputs.stage == 'all' && needs.steady.outputs.a1 == 'true' && needs.steady.outputs.layers == 'true')
+      needs.init.outputs.stage == 'adjoint' ||
+      (needs.init.outputs.stage == 'all' && needs.steady.outputs.a1 == 'true' && needs.steady.outputs.layers == 'true')
     strategy:
       fail-fast: false
       matrix:
-        turb: ${{ fromJSON(inputs.turbs) }}
+        turb: ${{ fromJSON(needs.init.outputs.turbs) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 350
     steps:
@@ -409,13 +559,13 @@ jobs:
           pip install $PY_DEPS
       - name: steady state
         run: |
-          gh run download "${{ inputs.src_run || github.run_id }}" -R "${{ github.repository }}" -n steadystate -D /tmp/ss
+          gh run download "${{ needs.init.outputs.src_run || github.run_id }}" -R "${{ github.repository }}" -n steadystate -D /tmp/ss
           tar xzf /tmp/ss/steadystate.tgz -C research/sidepod_opt
       - name: "solve (${{ matrix.turb }} turbulence adjoint)"
         id: solve
         working-directory: research/sidepod_opt
         env:
-          NP: ${{ inputs.NP }}
+          NP: ${{ needs.init.outputs.NP }}
           TURB: ${{ matrix.turb }}
         timeout-minutes: 330
         run: |
@@ -468,22 +618,25 @@ jobs:
 
   verdict:
     name: "4 verdict + ROUTES.md + push results"
-    needs: [proda, bumps, adjoint]
-    if: always() && (inputs.stage != 'all' || needs.proda.outputs.chained != 'true')
+    needs: [init, proda, bumps, adjoint]
+    if: >-
+      always() && needs.init.outputs.stage != 'none' &&
+      (needs.init.outputs.stage != 'all' || needs.proda.outputs.chained != 'true')
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
       - uses: actions/setup-python@v5
         with: { python-version: "3.11" }
       - run: pip install $PY_DEPS
       - name: gather state, bumps and sensitivities
         working-directory: research/sidepod_opt
         env:
-          SITES: ${{ inputs.sites }}
-          TURBS: ${{ inputs.turbs }}
-          SRC_RUN: ${{ inputs.src_run }}
-          VERDICT_RUNS: ${{ inputs.verdict_runs }}
+          SITES: ${{ needs.init.outputs.sites }}
+          TURBS: ${{ needs.init.outputs.turbs }}
+          SRC_RUN: ${{ needs.init.outputs.src_run }}
+          VERDICT_RUNS: ${{ needs.init.outputs.verdict_runs }}
           REPO: ${{ github.repository }}
           THIS_RUN: ${{ github.run_id }}
         run: |
@@ -494,31 +647,31 @@ jobs:
           tar xzf /tmp/gather/bg/bumpgeom.tgz -C . 2>/dev/null || echo "no bumpgeom (judge STLs missing: verdict will not run)"
           gh run download "${SRC_RUN:-$THIS_RUN}" -R "$REPO" -n steadystate -D /tmp/gather/ss 2>/dev/null || true
           tar xzf /tmp/gather/ss/steadystate.tgz -C . 2>/dev/null || echo "no steadystate"
-          # 2) bump and esi artifacts from this run and (for repair dispatches) the runs listed
+          # 2) bump and esi artifacts from this run and (for repair runs) the runs listed
           if [ -n "$VERDICT_RUNS" ]; then RUNS="$VERDICT_RUNS"; elif [ -n "$SRC_RUN" ]; then RUNS="$SRC_RUN $THIS_RUN"; else RUNS="$THIS_RUN"; fi
           for R in $RUNS; do
-            for s in $(python -c "import json,os;print(' '.join(json.loads(os.environ['SITES'])))"); do
+            for s in $(python3 -c "import json,os;print(' '.join(json.loads(os.environ['SITES'])))"); do
               gh run download "$R" -R "$REPO" -n "bump-$s" -D "/tmp/gather/b/$R/$s" 2>/dev/null && tar xzf "/tmp/gather/b/$R/$s/bump.tgz" -C . || true
             done
-            for t in $(python -c "import json,os;print(' '.join(json.loads(os.environ['TURBS'])))"); do
+            for t in $(python3 -c "import json,os;print(' '.join(json.loads(os.environ['TURBS'])))"); do
               gh run download "$R" -R "$REPO" -n "esi-$t" -D "/tmp/gather/e/$R/$t" 2>/dev/null && tar xzf "/tmp/gather/e/$R/$t/esi.tgz" -C . || true
             done
           done
           ls gate_results_resolved_up/ 2>/dev/null | head -30 || true
       - name: judge (same marks as the driver) and write the verdict
         working-directory: research/sidepod_opt
+        env:
+          TURBS: ${{ needs.init.outputs.turbs }}
         run: |
           mkdir -p gate_results_resolved_up/esi
           grep -h '"morph_fallback": true' gate_results_resolved_up/bump_*.json >/dev/null 2>&1 && echo "WARNING: a bump fell back to a fresh mesh; that pair is not usable"
-          for turb in ${{ join(fromJSON(inputs.turbs), ' ') }}; do
+          for turb in $(python3 -c "import json,os;print(' '.join(json.loads(os.environ['TURBS'])))"); do
             J=gate_results_resolved_up/esi/pair_judge_$turb.json
             [ -f "$J" ] && continue
             [ -f gate_results_resolved_up/esi/esi_sens_$turb.npz ] && python -W ignore dafoam/pair_judge.py \
               gate_results_resolved_up/esi/esi_sens_$turb.npz gate_results_resolved_up \
               --sites pod_rear pod_front_low pod_rear_top --out "$J" || echo "esi $turb: no result"
           done
-          cp -f gate/refA_resolved/logs/snappyHexMesh.log /tmp/snappy.log 2>/dev/null || true
-          COV=$(grep -oE "Extruding [0-9]+ out of [0-9]+ faces \([0-9.]+%\)" /tmp/snappy.log 2>/dev/null | tail -1)
           python - <<'PY' | tee gate_results_resolved_up/esi/VERDICT.txt | tee -a "$GITHUB_STEP_SUMMARY"
           import json, os
           for p in ("gate_results_resolved/prodcheck_stateA.json", "gate_results_resolved_up/base.json"):
@@ -600,13 +753,12 @@ jobs:
           print("\n".join(lines))
           PY
           cd ../..
-          git config user.name "mxnviir"
-          git config user.email "mxnviir@users.noreply.github.com"
-          git add research/sidepod_opt/gate_results_resolved research/sidepod_opt/gate_results_resolved_up research/sidepod_opt/ROUTES.md
+          git config user.name "mxnviir"; git config user.email "mxnviir@users.noreply.github.com"
+          git add research/sidepod_opt/gate_results_resolved research/sidepod_opt/gate_results_resolved_up research/sidepod_opt/ROUTES.md 2>/dev/null || true
           git commit -q -m "Normal adjoint test on the wall-resolved mesh: results (distributed, GitHub Actions)" || echo "nothing to commit"
           ok=0
           for i in 1 2 3 4; do git pull -q --no-rebase --no-edit origin "$BRANCH" 2>/dev/null; \
-            if git push -q "https://x-access-token:${{ github.token }}@github.com/$REPO.git" "HEAD:$BRANCH" 2>/dev/null; then ok=1; break; fi; sleep $((2 ** i)); done
+            if git push -q; then ok=1; break; fi; sleep $((2 ** i)); done
           [ "$ok" = 1 ] || { echo "push failed"; exit 1; }
           git log --oneline -1
       - name: report

@@ -883,6 +883,25 @@ external topology case was **not found** in their material (that is not proof it
     to the 5 M-cell PC test (`esi/run_resolved_test.sh`): stop and report if layers cover < 50 % of wall
     faces; `bccheck` refuses the same way.
   - Medium additions continue here.
+- **2026-11-21 16:05, the medium "mesh scatter" was partly geometry: repeat copies moved the surface by up to 0.2–1.5 mm.**
+  - The `_p05/_m05` copies nudged the design field by ±0.05 mm, but the builder works on 1 mm voxels with
+    mill and wall rules, so a nudge can flip whole voxels. Measured surface distance of each copy from its
+    design (99th percentile / max): team_p05 (rule-folded, as run on medium) 0.25 / 0.30 mm; team_m05
+    0.29 / 0.45; the old win3_p05 0.43 / 0.79 (window edges; volume −1.0 cm³) and it8_p05 (raw field, as
+    run) 0.17 / 0.65 mm; built from the raw field nopod_p05 even 1.33 / 1.49 mm. Only some raw-field
+    copies are clean (team_p05 0.02, win3_p05 0.03 mm).
+  - **So:** the 3-window "second mesh" (186.73 vs 180.93) was a different design; relabelled
+    `prodcheck_win3edge`. The medium σ of 1.5 mN, the groove's 178.1 outlier and design 8's spread each
+    mix mesh noise with real sub-mm geometry changes, in unknown proportions.
+  - **Fix: repeat meshes now keep the geometry identical** and shift the whole meshing frame along x by
+    k × 0.37 mm (`GATE_DOMAIN_DX_MM`; campaign tags `<design>~k`). The mesher then cuts different cells
+    around the same car.
+  - **Clean medium test now running:** groove~1, groove~2, design 8~1, design 8~2, team~1, then the
+    medium singles (blend 50/75, 5 windows). Marks, fixed now: if groove~1/~2 both land within 1 mN of
+    174.8, the groove's 178.1 came from its 0.19 mm geometry change (a design whose drag jumps 3 mN for
+    0.2 mm is fragile in its own right); if they spread over ~3 mN, the two flow states are a mesh effect.
+    Same reading for design 8 around its first value, 178.3. σ_medium is re-estimated from frame shifts
+    only.
 
 ## Sources
 

@@ -59,17 +59,19 @@ measure() {  # measure <json> <cmd...>: peak memory (RAM + swap in use, whole ma
 }
 
 # design tag -> number of meshes; order = priority
-FORWARD="team team_p05 team_m05 groove groove_p05 groove_m05 adjoint8 adjoint8_p05 adjoint8_m05 win3 win3_p05 nopod nopod_p05 blend50 blend50_p05 blend75 blend75_p05 win5"
+# "<design>~k" = the same car on a repeat mesh: the meshing frame shifted by k x 0.37 mm in x (GATE_DOMAIN_DX_MM)
+FORWARD="${FORWARD_LIST:-team team~1 team~2 groove groove~1 groove~2 adjoint8 adjoint8~1 adjoint8~2 win3 win3~1 nopod nopod~1 blend50 blend50~1 blend75 blend75~1 win5}"
 selected() { local t; for t in $FORWARD; do
   if [ -n "${ONLY:-}" ]; then for o in $ONLY; do [ "$t" = "$o" ] && echo $t; done; else echo $t; fi; done; }
 
 one_forward() {   # one production run of a car on a fresh $RES mesh, cold start
   local t=$1
   [ -f "$OUT/prodcheck_$t.json" ] && return 0
-  [ -f "$CARS/$t/car/car_half.stl" ] || { say "MISSING car $t (run the cars stage)"; return 1; }
+  local car=${t%%~*} k=0; [[ $t == *~* ]] && k=${t#*~}
+  [ -f "$CARS/$car/car/car_half.stl" ] || { say "MISSING car $car (run the cars stage)"; return 1; }
   say "start $t"
-  PRODCHECK_RES=$RES PRODCHECK_RESULTS=$OUT PRODCHECK_ITERS=$ITERS PRODCHECK_TIMEOUT=$TIMEOUT \
-    measure "$OUT/resources_$t.json" "$PY" -W ignore prodcheck.py "$CARS/$t/car" "$t" "$NP" cold > "gate/prodcheck_${TAG}_$t.log" 2>&1
+  GATE_DOMAIN_DX_MM=$(awk "BEGIN{print $k*0.37}") PRODCHECK_RES=$RES PRODCHECK_RESULTS=$OUT PRODCHECK_ITERS=$ITERS PRODCHECK_TIMEOUT=$TIMEOUT \
+    measure "$OUT/resources_$t.json" "$PY" -W ignore prodcheck.py "$CARS/$car/car" "$t" "$NP" cold > "gate/prodcheck_${TAG}_$t.log" 2>&1
   if [ -f "$OUT/prodcheck_$t.json" ]; then say "done $t $("$PY" -c "import json;d=json.load(open('$OUT/prodcheck_$t.json'));print(round(d['D20_half_N']*1e3,2),'mN cells',d.get('n_cells'),'y+max',round(d.get('y_plus_max') or 0,1),'conv',d['converged'])")"; commit "forward $t"
   else say "FAILED $t (gate/prodcheck_${TAG}_$t.log)"; fi
 }

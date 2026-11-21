@@ -38,7 +38,12 @@ CENTRES = {"nose_top": (0.030, 0.000, 0.022), "nose_side": (0.040, 0.008, 0.019)
 
 def kw(extra=None):
     import stopwatch as SW
-    k = dict(SW.SEARCH, domain_reference_bounds=DOMAIN, resolution=RES)
+    # GATE_DOMAIN_DX_MM: shift the whole meshing frame along x (same car STL, same domain size): the
+    # background grid and octree cut the SAME geometry differently. This is the clean repeat mesh; nudging the
+    # design field instead also moves parts of the surface by 0.2-1.5 mm (ROUTES.md 2026-11-21 16:05).
+    dx = float(os.environ.get("GATE_DOMAIN_DX_MM", "0")) * 1e-3
+    dom = ((DOMAIN[0][0] + dx,) + tuple(DOMAIN[0][1:]), (DOMAIN[1][0] + dx,) + tuple(DOMAIN[1][1:]))
+    k = dict(SW.SEARCH, domain_reference_bounds=dom, resolution=RES)
     if os.environ.get("GATE_TIMEOUT"):                     # seconds per OpenFOAM stage (fine/resolved meshes)
         k["stage_timeout_s"] = int(os.environ["GATE_TIMEOUT"])
     if os.environ.get("GATE_WALL_RESOLVED") == "1":        # wall-resolved layer stack on any resolution

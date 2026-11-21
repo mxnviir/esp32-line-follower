@@ -18,7 +18,7 @@ COARSE = {"team": "seed_fresh", "team_p05": "scatter_seed_p05", "team_m05": "sca
           "groove": "concept_channel_fresh", "adjoint8": "best_it8", "win3": "concept_win3_fresh", "win5": "concept_win5_fresh",
           "nopod": "lean_seed_fresh", "blend50": "concept_blend50_fresh", "blend75": "concept_blend75_fresh"}
 ORDER = ["team", "groove", "adjoint8", "win3", "win5", "nopod", "blend50", "blend75"]
-design = lambda t: t.split("_p")[0].split("_m")[0]
+design = lambda t: t.split("~")[0].split("_p0")[0].split("_m0")[0]
 
 
 def load(res_dir, names):

@@ -53,15 +53,15 @@ def fields(car):
         "win3": windows(car, so, [(60, 72), (80, 92), (100, 112)]),
         "win5": windows(car, so, [(55, 63), (67, 75), (79, 87), (91, 99), (103, 111)]),
         "adjoint8": f8,
-        # repeat-mesh copies (same recipes as runs/concepts/seed_p05 etc.)
-        "team_p05": team_rules + 0.05 * car.region, "team_m05": team_rules - 0.05 * car.region,
-        "adjoint8_p05": f8 + 0.05, "adjoint8_m05": f8 - 0.05,
+        "adjoint8_p05": f8 + 0.05 * car.region, "adjoint8_m05": f8 - 0.05 * car.region,
     }
-    for k in ("groove", "nopod", "win3", "blend50", "blend75"):
-        base = SL.build_design(car, out[k])["f_rules"]
-        out[f"{k}_p05"] = base + 0.05 * car.region
-        if k == "groove":
-            out["groove_m05"] = base - 0.05 * car.region
+    # repeat-mesh copies: the RAW field shifted by +/-0.05 mm, so the surface moves by ~0.05 mm everywhere
+    # (measured: 99.9 % of win3_p05 within 0.04 mm). The earlier copies (medium mesh, 2026-11-21) shifted the
+    # rule-folded field instead, which also moves parts of the surface by up to 0.25-0.45 mm (team_m05 0.33,
+    # old win3_p05 0.61 mm at the window edges): ROUTES.md 2026-11-21 16:00.
+    for k, sh in (("team", 0.05), ("team", -0.05), ("groove", 0.05), ("groove", -0.05), ("nopod", 0.05),
+                  ("win3", 0.05), ("blend50", 0.05), ("blend75", 0.05)):
+        out[f"{k}_{'p' if sh > 0 else 'm'}05"] = np.asarray(out[k], float) + sh * car.region
     return out
 
 
@@ -73,12 +73,24 @@ def main():
         import tempfile
         out = Path(tempfile.mkdtemp())
     car = SL.load_car()
+    vox = {}
     for tag, f in fields(car).items():
         b = SL.build_design(car, np.asarray(f, float))
         if not b["check"]["ok"]:
             print(tag, "FAILED the build check", b["check"], flush=True)
             continue
         folder = SL.export_design(car, b, out / tag, tag)
+        if tag.endswith(("_p05", "_m05")) and tag[:-4] in vox:
+            # a repeat copy must be the same surface moved by ~0.05 mm: every sampled point within 0.2 mm
+            pts = b["mesh"].sample(20000, return_index=False) if hasattr(b["mesh"], "sample") else b["mesh"].vertices
+            import trimesh
+            d = np.abs(trimesh.proximity.signed_distance(vox[tag[:-4]], pts))
+            q99, q999, mx = np.percentile(d, 99), np.percentile(d, 99.9), d.max()
+            flag = "OK" if q99 <= 0.1 else "NOT A CLEAN REPEAT"
+            print(f"   {tag}: surface vs {tag[:-4]}: p99 {q99:.3f} p99.9 {q999:.3f} max {mx:.3f} mm -> {flag}", flush=True)
+            if q99 > 0.1 and "--strict" in sys.argv:
+                raise SystemExit(f"{tag} is not a clean repeat of {tag[:-4]}")
+        vox[tag] = b["mesh"]
         line = f"{tag:14s} pod {(b['voxels'] & car.region).sum() * 1e-3:5.1f} cm3  mass {b['mass']['race_mass_g']:.2f} g  lead {b['mass']['lead_g']:.2f} g  volume {b['mesh'].volume:.1f} mm3"
         if check and tag in LOCAL and (SP / LOCAL[tag] / "car_half.stl").exists():
             import trimesh

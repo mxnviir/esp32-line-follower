@@ -159,6 +159,10 @@ p = B / "dafoam_primal.json"
 if not p.exists():
     print("BCCHECK_FAIL: DAFoam primal did not finish (gate/dafoam_bccheck.out)"); sys.exit()
 snap = Path("gate/refA_bccheck/logs/snappyHexMesh.log")
+import re
+cov = re.findall(r"Extruding (\d+) out of (\d+) faces", snap.read_text(errors="replace")) if snap.exists() else []
+if cov and int(cov[-1][0]) < 0.5 * int(cov[-1][1]):
+    print(f"BCCHECK_INVALID: layers extruded on only {cov[-1][0]} of {cov[-1][1]} wall faces"); sys.exit()
 if snap.exists() and "No layers to generate" in snap.read_text(errors="replace"):
     print("BCCHECK_INVALID: the mesh has no wall layers, so wall-resolved conditions were not tested"); sys.exit()
 d = json.loads(p.read_text()); r = d["D_half_N"] / a["D20_half_N"] - 1

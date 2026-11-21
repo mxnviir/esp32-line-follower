@@ -875,6 +875,14 @@ external topology case was **not found** in their material (that is not proof it
     0.5–2 at every site. If it passes, a normal adjoint on wall-resolved meshes is viable (its memory is
     a few times the forward run's, so it fits fine meshes on ordinary machines). If it fails, the
     normal adjoint is not trustworthy for this car and the discrete one stays, on a memory budget.
+- **2026-11-21 15:40, the quick wall-resolved test on the coarse mesh is not possible: no layers form there.**
+  - Coarse + wall-resolved (`wall_resolved=True`: walls at 2.8 mm, ~16-layer stack from 15 µm): snappy
+    extruded **0 of 5,666** wall faces, then decomposePar died (SIGFPE in `boundBox`). So the cheap
+    version of the normal-adjoint test can't be run on the coarse mesh; it needs the finer walls.
+  - Part 2's own note: on the `resolved` mesh, y+ ≤ 2 was reached on 57 % of body faces. Added **mark L**
+    to the 5 M-cell PC test (`esi/run_resolved_test.sh`): stop and report if layers cover < 50 % of wall
+    faces; `bccheck` refuses the same way.
+  - Medium additions continue here.
 
 ## Sources
 

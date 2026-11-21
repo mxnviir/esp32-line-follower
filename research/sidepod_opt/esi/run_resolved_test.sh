@@ -33,6 +33,13 @@ if ! grep -q '"steady_pass"' gate_results_resolved_up/base.json 2>/dev/null; the
 fi
 SNAP=gate/refA_resolved/logs/snappyHexMesh.log
 if [ -f "$SNAP" ] && grep -q "No layers to generate" "$SNAP"; then say "STOP: the mesh has NO wall layers; not a wall-resolved test"; exit 1; fi
+# mark L (fixed 2026-11-21 15:40): the layer stack must cover >= 50 % of the wall faces, or this is not a
+# wall-resolved test (on the coarse mesh it extruded 0 of 5,666 faces; Part 2 measured y+ <= 2 on 57 % of
+# body faces of the resolved mesh)
+COV=$(grep -oE "Extruding [0-9]+ out of [0-9]+ faces \([0-9.]+%\)" "$SNAP" 2>/dev/null | tail -1)
+say "layer coverage: ${COV:-unknown}"
+PCT=$(echo "$COV" | grep -oE "[0-9.]+%" | tr -d %); PCT=${PCT%.*}
+[ -n "$PCT" ] && [ "$PCT" -lt 50 ] && { say "STOP: mark L failed (layers on ${PCT} % of wall faces < 50 %); report it"; exit 1; }
 "$PY" - <<'PY' | tee -a "$LOG"
 import json
 a = json.load(open("gate_results_resolved/prodcheck_stateA.json")); b = json.load(open("gate_results_resolved_up/base.json"))

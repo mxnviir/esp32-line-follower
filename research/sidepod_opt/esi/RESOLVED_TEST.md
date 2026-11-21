@@ -60,6 +60,14 @@ tail -f research/sidepod_opt/gate/resolved_test.log
 - It is **resumable**: after a crash, reboot or Ctrl-C, run the same command; finished steps are skipped.
 - Add `PUSH=1` to commit and push the results to the branch at the end (never to `main`).
 
+## Layer check first (mark L)
+
+The whole point is a wall-resolved mesh, so after step 1 the script reads snappyHexMesh's
+`Extruding X out of Y faces (P%)` and **stops if fewer than 50 % of wall faces got layers**. Why it
+matters: on the 2.8 mm coarse walls the stack formed on **0 of 5,666 faces** (2026-11-21 15:30), and Part 2
+measured y+ ≤ 2 on only 57 % of the body faces of this resolved mesh (`openfoam_case.py`, 2026-09-30). If
+mark L fails, report the coverage and stop; the adjoint verdict would not answer the question.
+
 ## Pass marks (fixed before any result; do not change them)
 
 For each ESI version (frozen, sst): **PASS** only if Pearson r ≥ 0.9, every sign agrees, and
@@ -76,7 +84,7 @@ predicted/measured is between 0.5 and 2 at all three sites. The script prints th
 
 ## Report back (to the owner, and append a dated entry to `research/sidepod_opt/ROUTES.md`)
 
-1. Mesh: cells, y+ min/max, and whether layers were added (step 1 line in the log).
+1. Mesh: cells, y+ min/max, and the layer coverage line (`Extruding X out of Y faces`).
 2. Production and steady drag; the A1 block span.
 3. The six bump drags and the three measured half-differences with their stderr.
 4. `VERDICT.txt` for frozen and sst.

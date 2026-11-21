@@ -60,6 +60,8 @@ def fields(car):
     for k in ("groove", "nopod", "win3", "blend50", "blend75"):
         base = SL.build_design(car, out[k])["f_rules"]
         out[f"{k}_p05"] = base + 0.05 * car.region
+        if k == "groove":
+            out["groove_m05"] = base - 0.05 * car.region
     return out
 
 

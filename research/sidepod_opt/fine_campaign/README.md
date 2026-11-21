@@ -48,9 +48,11 @@ RES=<res> bash fine_campaign/campaign.sh summary             # -> fine_campaign/
 
 Keep `NP` the same for every run of one comparison, and record it (it is written into every result).
 
-## The 16 forward runs per mesh
+## The 18 forward runs per mesh
 
-team ×3, groove ×2, adjoint design 8 ×2, 3 windows ×2, no pod ×2, blend 50 % ×2, blend 75 % ×2, 5 windows ×1.
+team ×3, groove ×3, adjoint design 8 ×3, 3 windows ×2, no pod ×2, blend 50 % ×2, blend 75 % ×2, 5 windows ×1 (18 runs).
+On medium the groove and design 8 each read either ~174.5 or ~178 mN depending on the mesh (two flow
+states); two meshes can't reveal that, so the three designs that matter most get three.
 The `_p05` / `_m05` copies are the same design shifted by ±0.05 mm, so each gets its own mesh: the
 mesh-to-mesh scatter is measured for every design (on medium the team pod repeats to 0.4 mN while
 design 8 swung by 4 mN).

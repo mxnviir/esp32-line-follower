@@ -787,6 +787,19 @@ external topology case was **not found** in their material (that is not proof it
     and 0.1): a design sitting near a flow switch. A real gain that depends on the mesh draw is a
     robustness problem for a car that has to be built and raced.
   - The fine/resolved forward runs (mark C5) decide it; until then: "a small gain, not established".
+- **2026-11-21 13:40, the groove's third medium mesh: 178.11 mN (first two 174.86, 174.66).**
+  - The jump is on the body (26.4 vs 23.7–24.1 mN; pressure part 13.1 vs 10.9–11.2), not the wheels.
+  - Medium per design now: team 179.71 (sd 0.4, 3 meshes), groove 175.88 (sd 1.9, 3), design 8
+    176.26 (sd 2.0, 3). Against the team pod: groove **−3.8 ± 1.1**, design 8 **−3.5 ± 1.2** mN (SE
+    from each design's own sd). Pooled σ 1.64 mN (6 dof), so mark M2 (≤ 2 mN) still passes on medium.
+  - **Correction of 12:25 and 13:05:** "the groove repeats to 0.1 mN, 20× steadier than design 8" was
+    two draws; with three, the groove swings as much as design 8. Both modified pods read either
+    ~174.5 or ~178 mN, as if they have two flow states and the mesh draw picks one; the team pod has
+    not shown this in three meshes. On medium the groove and design 8 are now indistinguishable
+    (both about −3.5 to −4 mN, ~2 %).
+  - Lesson for the campaign: two meshes per design can't reveal a two-state design. The fine/resolved
+    forward runs keep 2 meshes for most designs (cost), so their single-design verdicts carry this
+    caveat; the team pod, groove and design 8 should get ≥ 3 meshes there (README updated).
 
 ## Sources
 

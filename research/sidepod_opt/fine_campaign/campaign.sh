@@ -8,7 +8,7 @@
 # Stages (run in this order; each prints what it decided):
 #   cars      rebuild all test cars from code (fine_campaign/make_cars.py)           minutes, 1 core
 #   stage0    the team pod alone: cells, y+, peak memory, time per run.              STOP and read it
-#   forward   16 runs: 8 designs x 2-3 meshes each (production model, cold start)
+#   forward   18 runs: 8 designs x 1-3 meshes each (production model, cold start)
 #   steady    production state of the original car, then the first-order "steady model" on top of it;
 #             PASS/FAIL: does the wake go steady on this mesh? (the adjoint needs it)
 #   bumps     6 measured +/-1 mm bumps on the steady state (the gradient check's known answers)
@@ -59,7 +59,7 @@ measure() {  # measure <json> <cmd...>: peak memory (RAM + swap in use, whole ma
 }
 
 # design tag -> number of meshes; order = priority
-FORWARD="team team_p05 team_m05 groove groove_p05 adjoint8 adjoint8_p05 win3 win3_p05 nopod nopod_p05 blend50 blend50_p05 blend75 blend75_p05 win5"
+FORWARD="team team_p05 team_m05 groove groove_p05 groove_m05 adjoint8 adjoint8_p05 adjoint8_m05 win3 win3_p05 nopod nopod_p05 blend50 blend50_p05 blend75 blend75_p05 win5"
 selected() { local t; for t in $FORWARD; do
   if [ -n "${ONLY:-}" ]; then for o in $ONLY; do [ "$t" = "$o" ] && echo $t; done; else echo $t; fi; done; }
 

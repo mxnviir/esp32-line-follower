@@ -326,6 +326,17 @@ external topology case was **not found** in their material (that is not proof it
     morphed from production state A; it may fall back to a fresh mesh this far from the seed, which
     is then noisier), and run **`cloud_lean`** (seed: no pod, 10 g of lead available, so foam is
     free at first): can it grow a pod of its own, and how does it compare with the team's?
+- **2026-11-21 00:15, production check of the final design: inconclusive so far, chain queued.**
+  - `prodcheck_best_it8`: the morph from production state A failed (8 steps away), so a fresh mesh:
+    170.48 mN half car, stderr 1.63 mN, force swing 3 %. Against the seed's 179.92 mN on the morph
+    path that is −9.4 mN, but fresh vs morphed with the production wake is not a fair comparison.
+  - Queued: (1) `prodcheck_seed_fresh`, the seed on a fresh mesh with identical settings (fresh vs
+    fresh); (2) `prodchain.py`, production state A morphed through the loop's accepted designs
+    1 → 3 → 4 → 6 → 7 → 8 in order, each from the previous link: one low-noise lineage. If a link's
+    morph fails the chain stops (no fresh-vs-morph mixing). This is the decisive production check
+    of the run.
+  - `cloud_lean` (no-pod seed) started 23:56. Seed: 493.38 mN whole car (steady). The team's pod
+    is worth −9 % over no pod in the steady model (production: −12 %), consistent.
 
 ## Sources
 

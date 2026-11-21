@@ -1,0 +1,13 @@
+{
+ "D20_half_N": 0.17047804039178682,
+ "wall_s": 361.9,
+ "converged": true,
+ "residual_p": 0.0024016640252568625,
+ "force_osc": 0.02977179815614329,
+ "force_drift": 0.0004111000535311607,
+ "run_dir": "",
+ "force_mean_stderr": 0.0016342335631538626,
+ "morph_fallback": true,
+ "folder": "runs/cloud_original/it_008/car",
+ "scheme": "production linearUpwind"
+}

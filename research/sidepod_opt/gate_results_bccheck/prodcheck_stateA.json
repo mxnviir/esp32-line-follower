@@ -1,0 +1,21 @@
+{
+ "D20_half_N": 0.1785838936902164,
+ "wall_s": 386.0,
+ "converged": true,
+ "residual_p": 0.002500494679692643,
+ "force_osc": 0.02032875266587391,
+ "force_drift": 0.00029749929163004385,
+ "run_dir": "",
+ "force_mean_stderr": 0.0006660513707387421,
+ "morph_fallback": false,
+ "folder": "gate/original",
+ "scheme": "production linearUpwind",
+ "mesh": "fresh",
+ "resolution": "coarse",
+ "iterations": 2000,
+ "n_proc": 4,
+ "y_plus_min": 2.3391079996930104,
+ "y_plus_max": 180.28730868675876,
+ "n_cells": 106803,
+ "run_dir_kept": "/home/user/esp32-line-follower/research/sidepod_opt/gate/refA_bccheck"
+}

@@ -198,8 +198,8 @@ python campaign.py report runs/simscale       # runs.md, convergence.png, best.p
 - Only a geometry that can't be built, or fails all 10 counts, or diverges late in the run, counts as a failed design. CMA scores it as worse than its generation.
 - Finished results stay in `simscale_state.json` (`done`) until the campaign has stored them, so stopping the process mid-collect loses nothing.
 
-**State lives on disk,** so a run can die or be restarted at any point. `runs/` is not in git: `simscale_results/` holds a committed copy of everything needed to carry on (state files, designs, `x/`, the CMA pickle in `runs/`). On a fresh container, restore it with
-`mkdir -p runs/simscale/runs && cp simscale_results/{state.json,simscale_state.json,designs.jsonl,config.json} runs/simscale/ && cp -r simscale_results/x runs/simscale/ && cp simscale_results/runs/*.pkl runs/simscale/runs/`
+**State lives on disk,** so a run can die or be restarted at any point. `runs/` is not in git: `simscale_results/` holds a committed copy of everything needed to carry on (state files, designs, `x/`, the CMA pickle in `cma/`). On a fresh container, restore it with
+`mkdir -p runs/simscale/runs && cp simscale_results/{state.json,simscale_state.json,designs.jsonl,config.json} runs/simscale/ && cp -r simscale_results/x runs/simscale/ && cp simscale_results/cma/*.pkl runs/simscale/runs/`
 (cars in flight also need their `cars/<id>/body_mm.stl`; when none are in flight nothing else is needed).
 
 | File | Holds |

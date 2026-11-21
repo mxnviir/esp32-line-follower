@@ -92,7 +92,7 @@ jobs:
             echo "workflow_dispatch: stage $I_STAGE"
             exit 0
           fi
-          P=$(jq -r '.head_commit.modified[]? // empty' "$GITHUB_EVENT_PATH" 2>/dev/null | grep -m1 '^\.github/resolved_adjoint_state' || true)
+          P=$(jq -r '.head_commit.added[]?, .head_commit.modified[]?' "$GITHUB_EVENT_PATH" 2>/dev/null | grep -m1 '^\.github/resolved_adjoint_state' || true)
           if [ -z "$P" ] || [ ! -f "$P" ]; then
             out "stage=none"   # cleanup commit: every other job skips
             echo "no live launch state (head commit touched: '$P'); no-op run"

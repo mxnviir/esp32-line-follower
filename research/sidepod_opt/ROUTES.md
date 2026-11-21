@@ -513,6 +513,17 @@ external topology case was **not found** in their material (that is not proof it
   - **Open with the owner:** are the image's pods milled foam or printed? What rib thickness does
     the team's process achieve (foam 3 mm; printer minimum still a placeholder)? RULES_MAP lists
     no rule on through-openings in the body.
+- **2026-11-21 06:10, owner's answers and direction.** Pods are milled foam with **3 mm walls**; **no
+  through-hole rule**. The owner doesn't want invention limited by hand-made starting designs: the
+  system must invent its own geometry. The windowed pods (`runs/concepts/win*`) are **not seeds**:
+  they are an instrument check (can the CFD resolve 3 mm ribs and 8 mm windows, and do they change
+  race time beyond mesh scatter?). If not, the pod region's mesh is refined before any inventing
+  method runs. **Invention plan:**
+  1. a generative global search (CPPN in `design.py` or a rib/window frame family) through the
+     milling rules, scored by production CFD and exact race time, many designs in parallel;
+  2. a topology-capable adjoint loop for refinement: nucleation from a topological-sensitivity map
+     (where adding solid in air cuts drag), holes opening when thin walls' faces meet, less
+     smoothing and a finer pod mesh so rib-scale detail survives.
 
 ## Sources
 

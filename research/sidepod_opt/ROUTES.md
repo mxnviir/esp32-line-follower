@@ -978,6 +978,21 @@ external topology case was **not found** in their material (that is not proof it
   - Every comparison is measured against the team pod, so its noise sets every error bar. The groove's
     −4.6 ± 0.3 and design 8's −1.8 ± 0.5 (17:15, 18:25) are **on hold** until more clean team repeats.
     Queued first: team~2, team~3 (frame 0.74 / 1.11 mm), then blend 50/75, 5 windows.
+- **2026-11-21 20:05, clean medium verdict (same STL per design, meshing frame shifted; marks of 16:05 and 10:45).**
+
+  | design | clean meshes (mN) | mean | sd | vs team pod |
+  |---|---|---|---|---|
+  | team pod | 179.86, 177.74, 178.35, 179.03 | 178.75 | 0.91 | 0 |
+  | groove | 174.86, 175.02, 175.57 | 175.15 | 0.37 | **-3.6 ± 0.5** (7 SE, real) |
+  | design 8 (coarse adjoint) | 178.32, 177.09, 178.44 | 177.95 | 0.75 | **-0.8 ± 0.6** (1.3 SE, not established) |
+
+  - Pooled clean σ_medium = 0.74 mN (7 dof): mark M2 (≤ 2 mN) passes; single runs can rank designs
+    that differ by more than ~2 mN (3σ√2), and closer ones need ~3 meshes each.
+  - **The groove (hand-placed) is ~2 % better than the team pod on medium. The 10-step coarse-mesh adjoint
+    design shows no established gain** (coarse said −10.4 mN). Both modified pods change drag by several mN
+    for sub-mm shape changes (the nudged copies, 16:05–18:25): a milling-tolerance question for any pod.
+  - Earlier medium figures that used nudged copies (10:00–14:15: σ 1.52, groove −3.9, design 8 −3.5) are
+    superseded by this table.
 
 ## Sources
 

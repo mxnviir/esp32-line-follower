@@ -4,7 +4,7 @@ This guide takes someone new to the repo from nothing to a verified, faster side
 
 All paths below are relative to `research/sidepod_opt/` unless they start with `.github/` or `part`.
 
-**Status (2026-11-20):** the full route runs on SimScale. The team car's air volume was imported, meshed (5.7 M cells) and solved; evolved designs import and mesh through the campaign. The evaluator takes several API keys, about 10 runs per free account.
+**Status (2026-11-21):** the evolution runs on SimScale with a fixed-size mesh (section 3.3, mesh study below). Keys are used in order, each until SimScale reports it out of core-hours (`runs_per_key: null`); a 10-run limit per key is still available for free accounts.
 
 ---|---|
 | Design rules, geometry engine, legality checks, STL export | built and tested here |
@@ -78,7 +78,7 @@ python simscale_tool.py export /tmp/no_pod --design none    # the car with no si
 ### 3.2 SimScale access (API keys)
 
 1. Your plan must include **API access**: account settings → "API keys".
-2. Free/test accounts only have enough credit for about **10 runs each**. The evaluator takes several keys and uses each one for at most `runs_per_key` runs (10), then moves on to the next:
+2. The evaluator takes several keys and uses them **in the order given**. With `"runs_per_key": null` (current config) a key is used until SimScale refuses for lack of core-hours, then it is retired and its unfinished cars move to the next key. For free accounts with a known run limit, set `"runs_per_key": 10`:
    ```bash
    export SIMSCALE_API_KEYS='key1,key2,key3'      # comma, space or newline separated; SIMSCALE_API_KEY also works for one
    ```
@@ -109,7 +109,26 @@ python simscale_tool.py export /tmp/no_pod --design none    # the car with no si
 | Car | no-slip wall |
 | Wheels | rotating walls about +y through their centres, ω = −1416.43 rad/s (rim speed 20 m/s, rolling with the road) |
 | Result | "Forces and moments" on car + wheels; D20 and L20 = mean of the last 15 % of iterations × 2 (half car) |
-| Mesh | SimScale standard (Simmetrix) mesher, automatic sizing fineness 6, automatic layers, physics-based meshing, 1.5 mm cells in a box around the car: about 5.7 M cells, 0.15 core-hours |
+| Mesh | SimScale standard (Simmetrix) mesher, **manual sizing: 30 mm largest, 0.8 mm smallest cell** (`"sizing"` in the config; omit it for automatic fineness 6), automatic layers, physics-based meshing, 1.5 mm cells in a box around the car: 3.5–4.0 M cells for every design |
+
+**Mesh study (2026-11-21).** Automatic sizing let the faceted, lumpy evolved pods drive the cell count up (team car 2.9 M, evolved 6.1–8.2 M) and failed often. A 0.8 mm floor on the cell size fixes both:
+
+| Cells | auto 6 | min 0.5 mm | min 0.8 mm | min 1.2 mm |
+|---|---|---|---|---|
+| team car | 2.90 M | 3.63 M | 3.48 M | – |
+| c00004 | 6.12 M | 4.82 M | 3.84 M | 3.41 M |
+| c00008 | 8.20 M | 5.09 M | 4.04 M | 3.62 M |
+| c00001 | 6.55 M | 4.91 M | 3.88 M | 3.55 M |
+
+All nine manual meshes succeeded first time. Drag at 20 m/s (whole car):
+
+| Mesh | team car | c00004 | gap |
+|---|---|---|---|
+| auto 6, 1.5 mm box | 0.3843 N | 0.4081 N | +6.2 % |
+| min 0.8 mm, 1.5 mm box (used) | 0.3823 N | 0.4098 N | +7.2 % |
+| auto 6, 1.0 mm box | 0.3585 N | see `simscale_results/validate` | |
+
+The 1.0 mm box lowers the absolute drag by 7 %, so absolute values are not mesh-converged; what the evolution needs is the ranking, which the finer-mesh run of c00004 checks. Winners are re-run on the finer mesh before they are trusted. `simscale_validate.py` runs such checks outside the evolution.
 
 Cost seen on the first run: estimate 8.7 core-hours and 65 min; the real run took about 2 h 15 min wall time.
 

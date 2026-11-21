@@ -1,0 +1,11 @@
+{
+ "turbulence": "frozen",
+ "adjoint_iters": 3000,
+ "n_points": 3365,
+ "sum_dD_dXs": [
+  -0.30394162963726773,
+  -0.17240763256260475,
+  -0.11174754524488469
+ ],
+ "last_residuals": []
+}

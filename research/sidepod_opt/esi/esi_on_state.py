@@ -51,11 +51,35 @@ fs = oa._FV_SCHEMES_ADJOINT
 fs2 = re.sub(r"div\(phi,U\)\s+[^;]+;", "div(phi,U)         bounded Gauss upwind;", fs, count=1)   # the steady model
 assert fs2 != fs
 (out / "system" / "fvSchemes").write_text(fs2)
-(out / "system" / "fvSolution").write_text(oa._FV_SOLUTION_ADJOINT)
+fsol = oa._FV_SOLUTION_ADJOINT
+if os.environ.get("ESI_MESHMOVE") == "1":   # solvers for the adjoint eikonal (da) and adjoint grid displacement (ma), as liftFullSetup
+    fsol = fsol.replace("solvers\n{", """solvers
+{
+    "(m|ma)" { solver PCG; preconditioner DIC; tolerance 1e-9; relTol 0.01; }
+    "(yWall|da)" { solver PBiCGStab; preconditioner DILU; tolerance 1e-9; relTol 0.1; }""", 1)
+    assert '"(m|ma)"' in fsol, "solvers block not found"
+    fsol = re.sub(r"(equations\s*\{)", r'\1\n        "da.*" 0.7;\n        "yWall.*" 0.5;', fsol, count=1)
+    fs2 = fs2.replace("divSchemes\n{", "divSchemes\n{\n    div(-yPhi,da)      Gauss linearUpwind gradDaConv;\n    div(yPhi,yWall)    Gauss linearUpwind gradDConv;", 1)
+    fs2 = fs2.replace("gradSchemes\n{", "gradSchemes\n{\n    gradDaConv      cellLimited Gauss linear 1;\n    gradDConv       cellLimited Gauss linear 1;", 1)
+    assert "gradDaConv" in fs2 and "div(-yPhi,da)" in fs2
+    (out / "system" / "fvSchemes").write_text(fs2)
+(out / "system" / "fvSolution").write_text(fsol)
 (out / "system" / "decomposeParDict").write_text(oc._decompose_dict(n))
 od = oa.build_optimisation_dict(cfg, aref)
 od = re.sub(r"patches\s+\(([^)]*)\);(\s*direction)", r"patches    (car wheelF wheelR);\2", od, count=1)   # objective = D20's patches
 od = re.sub(r"(designVariables[\s\S]*?patches\s+)\([^)]*\);", r"\1(car);", od, count=1)               # sensitivity on the body
+# ESI's own "full setup" (tutorials .../naca0012/turbulent/liftFullSetup): grid sensitivities and the wall
+# distance terms on, ATC term kept near walls. Our default ("minimum setup") drops all three.
+if os.environ.get("ESI_MESHMOVE") == "1":
+    od = od.replace("includeMeshMovement false;", """includeMeshMovement true;
+        includeDistance     true;
+        adjointMeshMovementSolver { iters 1000; tolerance 1.e-6; }""")
+    assert "includeMeshMovement true;" in od
+if os.environ.get("ESI_ATC_FULL") == "1":
+    od2 = re.sub(r"nSmooth\s+\d+;", "nSmooth           0;", od)
+    od2 = re.sub(r"zeroATCPatchTypes\s+\([^)]*\);", "zeroATCPatchTypes ();", od2)
+    od2 = re.sub(r"maskType\s+\w+;", "maskType          faceCells;", od2)
+    assert od2 != od; od = od2
 (out / "system" / "optimisationDict").write_text(od)
 ras = oa.build_adjoint_ras_properties()
 ras = ras.replace("adjointRASModel adjointLaminar;", "adjointRASModel adjointkOmegaSST;" if turb == "sst" else "adjointRASModel adjointLaminar;")

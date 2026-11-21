@@ -851,6 +851,30 @@ external topology case was **not found** in their material (that is not proof it
     meshes with **no boundary-layer cells**: wall functions on cells of 1.4–5.6 mm (y+ up to ~180).
     That is Part 2's chosen search mesh, but it is one more reason the body drag moved so much
     between coarse and medium, and why the `resolved` runs are the real reference.
+- **2026-11-21 15:15, why the normal (ESI) adjoint is inaccurate here: not turbulence, not Reynolds number. Owner wants a normal adjoint (DAFoam's memory is too high).**
+
+  | ESI variant, coarse steady state, same 3 bump pairs | signs | r | predicted / measured |
+  |---|---|---|---|
+  | frozen turbulence, minimum setup | 3/3 | 0.98 | 0.09, 0.02, 0.24 |
+  | full SST adjoint, minimum setup | 3/3 | 0.98 | 0.09, 0.02, 0.25 |
+  | full SST, + grid sensitivities + wall distance ("full setup") + undamped wall ATC | crashed: SIGFPE in `adjointkOmegaSST::divDevReff` (as 2026-07-27) | | |
+  | full SST, + grid sensitivities + wall distance, ATC damping kept | 2/3 | −0.22 | 0.00, 0.08, −0.07 |
+  | frozen, + grid sensitivities + wall distance | 2/3 | −0.21 | 0.01, 0.08, −0.08 |
+  | DAFoam (discrete), for reference | 3/3 | 0.98 | 0.66–1.09 |
+
+  - **Not turbulence:** frozen and full SST agree to 1 %. **Not Reynolds number:** same flow on which
+    DAFoam matches. **Not the missing grid terms:** adding them made it worse.
+  - **Leading suspect: the near-wall mesh.** These meshes have no boundary-layer cells: wall functions
+    on 2.8–5.6 mm cells, y+ up to 180. The continuous adjoint's sensitivity is built from velocity and
+    adjoint-velocity gradients at the wall, which such a mesh doesn't resolve; continuous adjoints with
+    wall functions are a known weak spot (hence "adjoint wall functions", Zymaris et al. 2010). The
+    discrete adjoint is immune: it differentiates the wall function as computed.
+  - **Decisive test (queued after the medium additions and the layered BC check):** the same check on
+    the coarse mesh WITH the wall-resolved layer stack (y+ ≤ 2): steady state, 6 bumps, ESI frozen and
+    SST. Pass mark as before (r ≥ 0.9, signs on every pair above 3σ) plus predicted/measured within
+    0.5–2 at every site. If it passes, a normal adjoint on wall-resolved meshes is viable (its memory is
+    a few times the forward run's, so it fits fine meshes on ordinary machines). If it fails, the
+    normal adjoint is not trustworthy for this car and the discrete one stays, on a memory budget.
 
 ## Sources
 

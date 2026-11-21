@@ -102,7 +102,7 @@ from pathlib import Path; from geometry import Car
 c = Car(); c.export_car_folder(c.body_mesh, Path('gate/original'), 'original')"
   if [ ! -f "$OUT/prodcheck_stateA.json" ]; then
     say "start production state A ($RES)"
-    PRODCHECK_RES=$RES PRODCHECK_RESULTS=$OUT PRODCHECK_ITERS=$ITERS PRODCHECK_TIMEOUT=$TIMEOUT PRODCHECK_KEEP=$PWD/gate/refA_$TAG \
+    PRODCHECK_WALL_RESOLVED=${WALL_RESOLVED:-0} PRODCHECK_RES=$RES PRODCHECK_RESULTS=$OUT PRODCHECK_ITERS=$ITERS PRODCHECK_TIMEOUT=$TIMEOUT PRODCHECK_KEEP=$PWD/gate/refA_$TAG \
       measure "$OUT/resources_stateA.json" "$PY" -W ignore prodcheck.py gate/original stateA "$NP" cold > gate/prodcheck_${TAG}_stateA.log 2>&1 \
       || { say "FAILED state A"; exit 1; }
     commit "production state A"
@@ -113,7 +113,7 @@ c = Car(); c.export_car_folder(c.body_mesh, Path('gate/original'), 'original')"
   tail -2 gate/steady_$TAG.log | tee -a "$LOG"; commit "steady base"; say "STEADY_DONE" ;;
 bumps)
   grep -q '"steady_pass": true' "$UP/base.json" 2>/dev/null || [ "${SMOKE:-0}" = 1 ] || { say "REFUSED: steady base missing or FAILED its mark ($UP/base.json)"; exit 1; }
-  export GATE_RES=$RES GATE_RESULTS=$UP GATE_ITERS=${BUMP_ITERS:-1500} GATE_TIMEOUT=$TIMEOUT CFD_DIV_U="bounded Gauss upwind"
+  export GATE_RES=$RES GATE_RESULTS=$UP GATE_ITERS=${BUMP_ITERS:-1500} GATE_TIMEOUT=$TIMEOUT CFD_DIV_U="bounded Gauss upwind" GATE_WALL_RESOLVED=${WALL_RESOLVED:-0}
   if [ ! -f gate/bump_pod_rear_top_m/car_half.stl ]; then      # the bump geometry (mesh-independent)
     "$PY" -W ignore gate.py bumps > gate/bumps_make.log 2>&1
     for v in pod_rear pod_front_low pod_rear_top; do "$PY" -W ignore gate.py variant ${v}_m $v -1 >> gate/bumps_make.log 2>&1; done

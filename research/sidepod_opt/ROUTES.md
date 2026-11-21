@@ -337,6 +337,32 @@ external topology case was **not found** in their material (that is not proof it
     of the run.
   - `cloud_lean` (no-pod seed) started 23:56. Seed: 493.38 mN whole car (steady). The team's pod
     is worth −9 % over no pod in the steady model (production: −12 %), consistent.
+- **2026-11-21 01:12, PRODUCTION CHECK OF THE WHOLE RUN (`cloud_original`): the gain is real, the
+  late polish isn't.** Production schemes, coarse. Chain 1 morphs from production state A
+  (`prodchain_cloud_original.json`); chain 2 re-bases at design 4 on a fresh mesh against the seed's
+  fresh-mesh result (`prodchain_cloud_original_f4.json`). Half car:
+
+  | design | production change vs seed | steady model | ratio |
+  |---|---|---|---|
+  | 1 | −6.86 mN (morph chain) | −8.50 | 0.81 |
+  | 3 | −9.05 mN (morph chain) | −10.17 | 0.89 |
+  | 4 | −8.39 mN (fresh base) | −12.7 | 0.66 |
+  | 6 | −9.10 mN | −13.7 | 0.66 |
+  | 7 | −8.76 mN | −15.0 | 0.58 |
+  | 8 | **−8.16 mN** | −16.6 | 0.49 |
+
+  Fresh-vs-fresh, design 8 against the seed: −10.37 mN (170.48 vs 180.85; seed fresh vs seed morph
+  differ by 0.9 mN, so mesh scatter is ~1 mN here).
+  - **Verdict:** the final design beats the team's pod by **8–10 mN half car in the production
+    model (−4.5 to −5.7 %, ≈ 3–4 ms of race time)**. The big early steps carry over almost fully
+    (81–89 %). Once production plateaus (from design 3–4), the steady model's further −6 mN of
+    polish isn't confirmed: it optimises quirks of its own smoothed flow.
+  - **Method change:** production-check every few accepted steps, keep the design where production
+    is best, and stop a run once production stops improving (two checks without gain beyond ~1 mN).
+    For `cloud_original` the production-best is design 6 (−9.10) or 3 (−9.05), within noise of 8.
+- **2026-11-21 01:12, `cloud_lean` (no-pod seed): iteration 0 done.** 493.38 mN whole car (steady),
+  adjoint OK. Production checks of its designs run every 3 accepted steps, from its own production
+  seed run.
 
 ## Sources
 

@@ -25,6 +25,30 @@
    "wall_s": 348.1,
    "change_vs_seed_mN": -9.095572314543887,
    "change_vs_prev_mN": -0.7097650298601155
+  },
+  {
+   "it": 7,
+   "D20_half_N": 0.17209275542568087,
+   "stderr_N": 0.0011216490372321641,
+   "converged": true,
+   "morph_fallback": false,
+   "fresh_base": false,
+   "from": "run_8530_8bd3f7b07028",
+   "wall_s": 323.6,
+   "change_vs_seed_mN": -8.756326854498425,
+   "change_vs_prev_mN": 0.33924546004546197
+  },
+  {
+   "it": 8,
+   "D20_half_N": 0.1726851200224523,
+   "stderr_N": 0.001903833093451045,
+   "converged": true,
+   "morph_fallback": false,
+   "fresh_base": false,
+   "from": "run_8530_d2d77443fa20",
+   "wall_s": 366.5,
+   "change_vs_seed_mN": -8.163962257727004,
+   "change_vs_prev_mN": 0.592364596771422
   }
  ]
 }

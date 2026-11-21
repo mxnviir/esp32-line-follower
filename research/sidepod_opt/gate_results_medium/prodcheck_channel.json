@@ -1,0 +1,14 @@
+{
+ "D20_half_N": 0.17485507441814893,
+ "wall_s": 1831.7,
+ "converged": true,
+ "residual_p": 0.002430018405641393,
+ "force_osc": 0.040470337384598425,
+ "force_drift": 0.0004485785197444405,
+ "run_dir": "",
+ "force_mean_stderr": 0.0010873408314188383,
+ "morph_fallback": false,
+ "folder": "runs/concepts/channel/car",
+ "scheme": "production linearUpwind",
+ "mesh": "fresh"
+}

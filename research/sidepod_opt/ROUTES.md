@@ -629,6 +629,40 @@ external topology case was **not found** in their material (that is not proof it
   each. Question: does the coarse ranking (adjoint −10.4, groove −5.5, windows +2.0, no pod +25.3 mN
   against the team pod) hold on the finer mesh? This is step 1 of "validate the scoring" and the
   re-check the window verdict was waiting for.
+- **2026-11-21 09:30, medium mesh, first three of five: the groove holds, the adjoint gain does not reproduce (cause under test).**
+
+  | car (half car, production, fresh mesh) | coarse | medium (cold, 2,000 its) | body: coarse → medium | wheels: coarse → medium |
+  |---|---|---|---|---|
+  | team pod | 180.85 mN | 179.86 | 33.2 → 22.0 | 147.7 → 157.8 |
+  | groove | 175.40 (−5.5) | 174.86 (−5.0) | 33.5 → 23.7 | 141.9 → 151.1 |
+  | adjoint design 8 | 170.48 (−10.4) | 178.32 (−1.5) | 22.7 → 23.8 | 147.8 → 154.5 |
+
+  - Averaging error is small: 200-iteration block means move by ±0.2 mN (the JSON standard errors of
+    0.8–1.5 mN are conservative). Medium mesh-to-mesh scatter is NOT yet measured, so −1.5 mN is
+    neither a gain nor zero.
+  - **Where the drag sits (seen before the controls below were run):** on the coarse mesh the team
+    pod's body carries 19.8 mN of pressure drag; the adjoint removed 10.6 mN of it (body pressure
+    9.3) and left the wheels alone. On the medium mesh the team pod's body pressure drag is only
+    8.4 mN to begin with: the drag the adjoint removed isn't there. The groove works through the
+    wheels on both meshes (−5.8 coarse, −6.7 medium), so its mechanism carries over.
+  - **Two causes still fit** the adjoint number: (a) resolution, the coarse mesh invents body
+    pressure drag and the adjoint optimised that; (b) start state, the coarse runs were
+    warm-started from the team pod's flow for 1,000 iterations, the medium runs are cold starts.
+  - **Controls, pass marks fixed now (queued after the medium five):**
+    - *A, coarse mesh, cold start, 2,000 iterations, team pod and design 8.* Difference ≤ −7 mN:
+      the coarse mesh gives the gain from any start, cause is resolution. ≥ −4 mN: the warm start
+      held a favourable flow branch, and every warm-started coarse figure (chain −8.2, transfer
+      81–89 %, the no-pod stop rule) has to be re-checked cold. In between: mixed, say so.
+    - *B, second medium mesh of design 8 (field +0.05 mm) and of the team pod (seed_p05).* Design 8
+      within 1.5 mN of 178.32: the medium number stands. The two pairs give the first estimate of
+      medium mesh scatter.
+    - *3 windows and no pod (running):* "the coarse ranking holds" means the same order and each
+      difference against the team pod within 2 mN of coarse: windows +2.0 → [0, +4], no pod
+      +25.3 → [+23.3, +27.3].
+  - **If resolution is confirmed:** the adjoint polishes whatever model it is given, mesh errors
+    included, so design loops must run on a mesh whose body drag has converged (medium or finer),
+    and the −4.5 to −5.7 % claim for design 8 is withdrawn. The steady-model gradient check stays
+    valid as a check of the adjoint against its own model.
 
 ## Sources
 

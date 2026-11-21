@@ -548,6 +548,23 @@ external topology case was **not found** in their material (that is not proof it
       evidence (fine changes don't transfer to production; a young pod transferred ~30 %) is
       against it. Use topological sensitivities as hints inside the global search, not as the
       inventor.
+- **2026-11-21 06:45, is free-form generative search worth building? (owner's question; compute assumed plentiful).**
+  - Nobody publishes it because industry has no freedom to invent (styling, packaging, crash), a
+    full-car CFD run costs hours, and where shapes are free and physics is cheap (structures,
+    cooling channels) generative design is already mainstream. This car is the unusual case: a
+    nearly free shape, one objective, minutes per run.
+  - A widespread recipe gets most of it: a feature vocabulary (grooves, windows, ribs, tapers,
+    undercuts; millable by construction) + sampled search with a surrogate + adjoint polish.
+    Tonight: one hand-placed groove −3 %, adjoint polish −5 %.
+  - **Decision proposed to the owner:** run that recipe as the **baseline** and the free-form
+    generator as a **head-to-head experiment** at equal budget and scoring. The comparison answers
+    whether the generator earns its place (and is the result a paper needs).
+  - Not just a physics problem. Five problems: flow-model trust, search, software robustness,
+    manufacturing and strength of 3 mm ribs, the race model's placeholder friction. Compute fixes
+    search and part of trust. With compute plentiful the bottleneck is trust: no car has been
+    built. Highest-value spend: mill 3–4 deliberately different pods (team, adjoint-polished,
+    grooved, windowed) and time them against the CFD ranking; alongside, a mesh-refinement study
+    and time-accurate runs on the same four.
 
 ## Sources
 

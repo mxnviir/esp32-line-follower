@@ -824,6 +824,13 @@ external topology case was **not found** in their material (that is not proof it
     drops the mesh-movement (volume) terms of ESI's sensitivity (`includeMeshMovement false`), which
     ESI's own formulation includes by default. That the frozen and full-turbulence versions agree so
     closely points at a term both share, not at turbulence. Not pursued unless the owner asks.
+- **2026-11-21 14:15, medium-mesh scatter, final (pass marks of 10:45).**
+  - Team pod 4 meshes: 179.86, 180.05, 179.24, 180.03 (mean 179.79, sd 0.38). Groove 3: mean 175.88
+    (sd 1.94). Design 8 3: mean 176.26 (sd 2.03). Pooled σ_medium = **1.52 mN** (7 dof).
+  - Mark "σ_medium > 2 mN means medium can't score a search": **not triggered** (1.52). Caveat from
+    13:40: designs with two flow states need ≥ 3 meshes before a verdict.
+  - Against the team pod (SE from each design's own sd): groove **−3.9 ± 1.1 mN (3.4 SE, real)**;
+    design 8 **−3.5 ± 1.2 mN (2.9 SE, borderline)**. On medium the two are indistinguishable.
 
 ## Sources
 

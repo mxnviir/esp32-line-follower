@@ -90,9 +90,9 @@ class Campaign:
             elif k == "simscale_step":
                 import simscale_step_eval as SSE
                 self._ev[key] = SSE.SimScaleStepEvaluator(self.car, self.root / "simscale_state.json",
-                                                          runs_per_key=spec.get("runs_per_key", 10),
+                                                          runs_per_key=spec.get("runs_per_key", 10),   # null in the config = no limit
                                                           speed_mps=spec.get("speed_mps", 20.0), max_cost=spec.get("max_cost"),
-                                                          fineness=spec.get("fineness", 6), box_mm=spec.get("box_mm", 1.5),
+                                                          fineness=spec.get("fineness", 6), box_mm=spec.get("box_mm", 1.5), sizing=spec.get("sizing"),
                                                           iters=spec.get("iters", 1000), project_id=spec.get("project_id"))
             elif k == "adjoint":
                 self._ev[key] = EV.AdjointEvaluator(self.car, self.rm, spec.get("backend", "esi"), spec.get("res", "medium"))

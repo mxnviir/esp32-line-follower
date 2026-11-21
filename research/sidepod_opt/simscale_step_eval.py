@@ -40,6 +40,10 @@ QUOTA_WORDS = ("quota", "credit", "insufficient", "limit exceeded", "core hour",
                "subscription", "plan does not", "payment")
 
 
+RUN_QUOTA_WORDS = ("quota", "credit", "core hour", "core-hour", "cpu hour", "subscription", "balance")   # a failed
+# run's own messages: narrower than QUOTA_WORDS, so "max run time exceeded" or "not enough memory" never retire a key
+
+
 class GeometryError(ValueError):
     """The design's air volume cannot be built or meshed: the design fails, not the pipeline."""
 
@@ -57,14 +61,14 @@ class SimScaleStepEvaluator:
     name = "simscale"
 
     def __init__(self, car, state_path: Path, runs_per_key=10, speed_mps=20.0, max_cost=None,
-                 fineness=6, box_mm=1.5, iters=1000, project_id=None, sdk=None):
+                 fineness=6, box_mm=1.5, iters=1000, project_id=None, sdk=None, sizing=None):
         if sdk is None:
             import simscale_sdk as sdk
         self.sim, self.car = sdk, car
         self.state_path = Path(state_path)
         self.st = json.loads(self.state_path.read_text()) if self.state_path.exists() else {"keys": {}, "cases": {}}
         self.runs_per_key, self.speed, self.max_cost = runs_per_key, speed_mps, max_cost
-        self.fineness, self.box_mm, self.iters = fineness, box_mm, iters
+        self.fineness, self.box_mm, self.iters, self.sizing = fineness, box_mm, iters, sizing
         self.fixed_project = project_id
         self._clients, self._wheels = {}, None
         # finished results stay in the state file until the campaign has had them for a whole tick, so a
@@ -127,6 +131,8 @@ class SimScaleStepEvaluator:
     def _free(self, fp):
         """Run slots left on a key: runs started count, and so do cases assigned to it that have not run yet."""
         held = sum(1 for c in self.st["cases"].values() if c.get("fp") == fp and c["phase"] != "run")
+        if self.runs_per_key is None:                                  # no run limit: the key is used until SimScale
+            return max(0, 1000 - held)                                  # says it is out of core-hours (then retired)
         return max(0, self.runs_per_key - self.st["keys"][fp]["runs"] - held)
 
     def capacity(self):
@@ -263,7 +269,7 @@ class SimScaleStepEvaluator:
             if self._wheels is None:
                 self._wheels = ST.wheel_centres_m()
             sid, mo = ST.create_case(s, api, P, gi.geometry_id, f"sidepod {cid}", box, None, self._wheels,
-                                     self.fineness, self.box_mm, self.iters)
+                                     self.fineness, self.box_mm, self.iters, sizing=self.sizing)
             m_api = s.MeshOperationsApi(api)
             m_api.start_mesh_operation(P, mo, simulation_id=sid)
             c.update(phase="mesh", geometry_id=gi.geometry_id, sim_id=sid, mesh_op=mo)
@@ -286,6 +292,10 @@ class SimScaleStepEvaluator:
             if mo.status != "FINISHED":
                 return
             c["mesh_done"] = True
+            try:
+                c["cells"] = s.MeshesApi(api).get_mesh(P, mo.mesh_id).number_of_cells
+            except Exception:                                            # noqa: BLE001
+                pass
             if os.environ.get("SIMSCALE_HOLD_RUNS"):                     # smoke tests: stop before spending a run
                 return
             spec = s_api.get_simulation(P, c["sim_id"]); spec.mesh_id = mo.mesh_id
@@ -319,6 +329,16 @@ class SimScaleStepEvaluator:
                              if e.severity == "ERROR"]
                 except Exception:                                        # noqa: BLE001
                     pass
+                msgs = ""
+                try:
+                    msgs = " ".join((e.message or "") for e in (r_api.get_simulation_run_event_log(P, c["sim_id"], c["run_id"]).entries or [])
+                                    if e.severity == "ERROR").lower()
+                except Exception:                                        # noqa: BLE001
+                    pass
+                if any(w in msgs for w in RUN_QUOTA_WORDS) or any("QUOTA" in x or "CREDIT" in x for x in codes):
+                    self._retire(c["fp"], f"run refused: {codes} {msgs[:150]}")   # the account, not the design
+                    c.update(fp=None, phase="wait", attempt=0)
+                    return
                 c.setdefault("tries", []).append(f"{FACES[c['attempt']]}: run {run.status} at {run.progress} {codes}")
                 # divergence in the first few % of iterations is a bad mesh element (seen at iteration 1),
                 # not the design: mesh it again from another pod triangle count
@@ -335,7 +355,7 @@ class SimScaleStepEvaluator:
             self.st["cases"].pop(cid)
             self._done[cid] = {"D20_N": Fx * sc, "L20_N": Fz * sc, "ok": True,
                                "info": {"simscale_sim": c["sim_id"], "run": c["run_id"], "project": P, "key": c["fp"],
-                                        "cost_estimate": c.get("cost_estimate"), "pod_faces": FACES[c["attempt"]],
+                                        "cost_estimate": c.get("cost_estimate"), "pod_faces": FACES[c["attempt"]], "cells": c.get("cells"),
                                         "wall_s": time.time() - c["t0"], **info}}
 
 

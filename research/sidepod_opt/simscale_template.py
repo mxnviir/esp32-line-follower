@@ -147,20 +147,37 @@ def make_box(s, api, P):
                                                                                max=vec(s, d, e, f))).geometry_primitive_id
 
 
-def create_case(s, api, P, gid, name, box, f=None, wheels=None, fineness=6, box_mm=1.5, iters=1000):
-    """Simulation + mesh operation for one imported air volume. Returns (simulation_id, mesh_operation_id)."""
+def mesh_sizing(s, fineness=6, sizing=None):
+    """Automatic sizing (fineness 0-10), or manual: {"max_mm": far-field edge, "min_mm": smallest edge,
+    "curv": relative curvature or None}. Manual sizing puts a floor under the cell size, so a faceted,
+    lumpy pod cannot drive the cell count up the way automatic curvature refinement does."""
+    if not sizing:
+        return s.AutomaticMeshSizingSimmetrix(fineness=fineness, curvature=s.AutomaticCurvature())
+    curv = s.RelativeCurvature(relative_curvature=sizing["curv"]) if sizing.get("curv") else s.AutomaticCurvature()
+    return s.ManualMeshSizingSimmetrix(maximum_edge_length=s.DimensionalLength(value=sizing["max_mm"], unit="mm"),
+                                       minimum_edge_length=s.DimensionalLength(value=sizing["min_mm"], unit="mm"),
+                                       curvature=curv)
+
+
+def create_case(s, api, P, gid, name, box, f=None, wheels=None, fineness=6, box_mm=1.5, iters=1000, sizing=None,
+                sim_id=None):
+    """Simulation + mesh operation for one imported air volume. Returns (simulation_id, mesh_operation_id).
+    With sim_id, only a new mesh operation is made (mesh studies on an existing simulation)."""
     f = f or faces_by_name(s, api, P, gid)
     missing = [n for n in NAMES if not f[n]] + ([] if f["car"] else ["car"]) + ([] if f["volume"] else ["volume"])
     if missing:
         from simscale_step_eval import GeometryError
         raise GeometryError(f"named faces missing after import: {missing}")
-    wheels = wheels or wheel_centres_m()
-    s_api = s.SimulationsApi(api)
-    spec = s.SimulationSpec(name=name, geometry_id=gid, model=build_spec(s, f, wheels, iters))
-    sid = s_api.create_simulation(P, spec).simulation_id
-    set_air(s, api, P, sid, f["volume"])
+    if sim_id is None:
+        wheels = wheels or wheel_centres_m()
+        s_api = s.SimulationsApi(api)
+        spec = s.SimulationSpec(name=name, geometry_id=gid, model=build_spec(s, f, wheels, iters))
+        sid = s_api.create_simulation(P, spec).simulation_id
+        set_air(s, api, P, sid, f["volume"])
+    else:
+        sid = sim_id
     mo = s.MeshOperationsApi(api).create_mesh_operation(P, s.MeshOperation(name=f"{name} mesh", geometry_id=gid, model=s.SimmetrixMeshingFluid(
-        sizing=s.AutomaticMeshSizingSimmetrix(fineness=fineness, curvature=s.AutomaticCurvature()),
+        sizing=mesh_sizing(s, fineness, sizing),
         refinements=[s.RegionRefinementWithLength(name="car box", refinement=s.InsideRegionRefinementWithLength(
             length=s.DimensionalLength(value=box_mm, unit="mm")),
             topological_reference=s.TopologicalReference(entities=[]), geometry_primitive_uuids=[box])],

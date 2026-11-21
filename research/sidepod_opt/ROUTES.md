@@ -837,6 +837,20 @@ external topology case was **not found** in their material (that is not proof it
     the 6 bumps reshape the mesh with no fallback and reproduce last night's half-differences
     (−1.50 / −0.70 / +0.25 mN vs −1.50 / −0.69 / +0.25); DAFoam takes the case and its primal reads
     228.72 mN, the pipeline's own value. Next: `bccheck` (wall-resolved layers), then medium additions.
+- **2026-11-21 14:50, the wall-resolved boundary check passed but was INVALID; a campaign bug found and fixed.**
+  - `bccheck` read pipeline 178.58 mN vs DAFoam 178.53 (−0.03 %), but its mesh had **no wall
+    layers** (snappy: "No layers to generate"; y+ up to 180). Cause: Part 2's search settings
+    (`stopwatch.SEARCH`) switch layers off (`layer_overrides nSurfaceLayers 0`), and
+    `resolved_layer_controls` applies those overrides too. So it only showed that DAFoam accepts the
+    wall-resolved condition *types*. Result kept as `gate_results_bccheck_nolayers/`.
+  - **The same bug would have hit the campaign:** every `resolved` (~5 M) run would have had no
+    layer stack, i.e. not wall-resolved at all. Fixed in `gate.kw` (resolved / wall-resolved runs drop
+    the override); `bccheck` now refuses to pass a mesh without layers. Re-run queued after the
+    medium additions.
+  - **Worth stating plainly:** every coarse and medium run so far (search, gate, adjoint, loops) is on
+    meshes with **no boundary-layer cells**: wall functions on cells of 1.4–5.6 mm (y+ up to ~180).
+    That is Part 2's chosen search mesh, but it is one more reason the body drag moved so much
+    between coarse and medium, and why the `resolved` runs are the real reference.
 
 ## Sources
 

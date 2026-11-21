@@ -158,6 +158,9 @@ B = Path(sys.argv[1]); a = json.loads((B / "prodcheck_stateA.json").read_text())
 p = B / "dafoam_primal.json"
 if not p.exists():
     print("BCCHECK_FAIL: DAFoam primal did not finish (gate/dafoam_bccheck.out)"); sys.exit()
+snap = Path("gate/refA_bccheck/logs/snappyHexMesh.log")
+if snap.exists() and "No layers to generate" in snap.read_text(errors="replace"):
+    print("BCCHECK_INVALID: the mesh has no wall layers, so wall-resolved conditions were not tested"); sys.exit()
 d = json.loads(p.read_text()); r = d["D_half_N"] / a["D20_half_N"] - 1
 print(f"pipeline {a['D20_half_N']*1e3:.2f} mN (y+ max {a.get('y_plus_max')}), DAFoam primal {d['D_half_N']*1e3:.2f} mN, diff {r*100:+.2f} %")
 print("BCCHECK_PASS" if abs(r) <= 0.02 else "BCCHECK_FAIL (|diff| > 2 %)")

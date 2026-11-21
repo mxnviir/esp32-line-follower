@@ -1,0 +1,20 @@
+{
+ "it": 1,
+ "step_mm": 1.5,
+ "T_current": 0.7731330287358811,
+ "D_current": 0.4933816278244858,
+ "run_current": "/home/user/esp32-line-follower/part2-simulation/cfd_case_template/runs/run_15129_e9cef7ed8266",
+ "mass_current": {
+  "foam_g": 15.461364125073379,
+  "lead_g": 10.214790153129696,
+  "car_g": 48.2,
+  "legal": true,
+  "race_mass_g": 69.35,
+  "com_x_car_mm": 160.64017301934322,
+  "com_z_mm": 23.41385330692171
+ },
+ "grad_ready": true,
+ "L_current": 0.2558346724170994,
+ "best_it": 0,
+ "stale_grad": 0
+}

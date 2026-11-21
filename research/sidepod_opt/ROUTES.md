@@ -705,6 +705,22 @@ external topology case was **not found** in their material (that is not proof it
     against the team pod (groove −5.0, design 8 −1.5) are within 2 mN of their medium values.
   - **Cost consequence:** the adjoint on the medium mesh (about 520k cells) doesn't fit this
     16 GB machine (the 100k-cell coarse adjoint needed swap); it needs the 32 GB+ machine.
+- **2026-11-21 10:45, control B, first half: FAILED its pass mark. Medium-mesh noise is large.**
+  - Design 8 on a second medium mesh (field +0.05 mm): **174.26 mN** against 178.32 on the first
+    (body 21.6 vs 23.8, wheels 152.7 vs 154.5). Pass mark was "within 1.5 mN"; the gap is 4.1 mN.
+  - Each run is steady in itself (200-iteration block means ±0.2 mN), so this is two meshes
+    settling in two different flow states, not averaging error. Coarse-mesh scatter was 0.32 mN;
+    the finer mesh resolves an unsteady wake and is far more mesh-sensitive.
+  - **Consequence:** no single medium-mesh run ranks two pods that are closer than several mN.
+    The 10:00 table's "groove −5.0, design 8 −1.5" are single draws; neither is established yet.
+    The coarse cold/warm control (10:10) still stands: the coarse gain is a coarse-mesh number.
+  - **Now running (fine-mesh queue held back):** repeat meshes by ±0.05 / +0.10 mm shifts until
+    the team pod has 4 medium meshes and the groove and design 8 have 3 each.
+  - **Pass marks, fixed now:** σ_medium = pooled standard deviation over the three designs.
+    A design differs from the team pod if |difference of means| > 3 × σ_medium × √(1/n₁ + 1/n₂).
+    If σ_medium > 2 mN, the medium mesh with this steady solver can't score a search (each design
+    would need ≥ 4 meshes), and the scoring model has to change (time-accurate averaging, a
+    steadier discretisation checked against it, or a finer mesh) before any search is built on it.
 
 ## Sources
 

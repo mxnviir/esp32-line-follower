@@ -126,9 +126,10 @@ All nine manual meshes succeeded first time. Drag at 20 m/s (whole car):
 |---|---|---|---|
 | auto 6, 1.5 mm box | 0.3843 N | 0.4081 N | +6.2 % |
 | min 0.8 mm, 1.5 mm box (used) | 0.3823 N | 0.4098 N | +7.2 % |
-| auto 6, 1.0 mm box | 0.3585 N | see `simscale_results/validate` | |
+| auto 6, 1.0 mm box | 0.3585 N | (estimate 94 core-h, not run) | |
+| min 0.8 mm, 1.0 mm box (6.8–6.9 M cells) | 0.3634 N | 0.4061 N | +11.8 % |
 
-The 1.0 mm box lowers the absolute drag by 7 %, so absolute values are not mesh-converged; what the evolution needs is the ranking, which the finer-mesh run of c00004 checks. Winners are re-run on the finer mesh before they are trusted. `simscale_validate.py` runs such checks outside the evolution.
+The 1.0 mm box lowers the absolute drag by 7 %, so absolute values are not mesh-converged; what the evolution needs is the ranking, and the finer mesh keeps it (the gap even grows, 7.2 % → 11.8 %), so the 1.5 mm box is used for the search. Winners are re-run on the finer mesh before they are trusted. `simscale_validate.py` runs such checks outside the evolution.
 
 Cost seen on the first run: estimate 8.7 core-hours and 65 min; the real run took about 2 h 15 min wall time.
 

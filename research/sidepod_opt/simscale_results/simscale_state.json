@@ -7,7 +7,7 @@
    "retired": null
   },
   "c303ee8756": {
-   "runs": 0,
+   "runs": 5,
    "project": "1399685146673566431",
    "box": "aac748ae-ea23-45dc-bec1-4eb944857f51",
    "retired": null
@@ -26,67 +26,69 @@
   }
  },
  "cases": {
-  "c00013": {
-   "folder": "runs/simscale/cars/c00013",
+  "c00018": {
+   "folder": "runs/simscale/cars/c00018",
+   "phase": "mesh",
+   "fp": "c303ee8756",
+   "t0": 1795284091.2863145,
+   "attempt": 0,
+   "import_id": "c633d1b9-7d73-434b-8cb9-0d39e5e5c33b",
+   "project": "1399685146673566431",
+   "geometry_id": "31274ad8-656c-4211-a074-e4f8398a8349",
+   "sim_id": "f9c7e736-f675-41b4-a1db-c8b35badbfa6",
+   "mesh_op": "5b586aeb-6e1c-46db-9d40-a7dab58568c8"
+  },
+  "c00019": {
+   "folder": "runs/simscale/cars/c00019",
    "phase": "step",
    "fp": "c303ee8756",
-   "t0": 1795280469.5277097,
+   "t0": 1795284091.2863226,
    "attempt": 2,
-   "import_id": "275388eb-a3ef-4fd7-bf25-f4c9ee519e51",
+   "import_id": "3369d91b-3dcb-4ee2-bc8b-08ea9530bd16",
    "project": "1399685146673566431",
    "tries": [
-    "4500: import FAILED model-has-invalid-geometry ['fault-face-tessellation_failed']",
+    "4500: import FAILED model-has-invalid-geometry ['fault-face-bad_face_face', 'fault-face-tessellation_failed']",
     "5200: import FAILED model-has-invalid-geometry ['fault-face-tessellation_failed']"
    ]
   },
-  "c00014": {
-   "folder": "runs/simscale/cars/c00014",
+  "c00020": {
+   "folder": "runs/simscale/cars/c00020",
+   "phase": "mesh",
+   "fp": "c303ee8756",
+   "t0": 1795284091.2863252,
+   "attempt": 0,
+   "import_id": "d60237a8-4e0d-4424-8877-a9653fc5da64",
+   "project": "1399685146673566431",
+   "geometry_id": "41315030-756c-4166-9da2-289928310587",
+   "sim_id": "7eef2e2d-9268-4942-b47a-2daacba018bc",
+   "mesh_op": "c6c1cdce-62b3-44f4-a4a8-ef087ddd5649"
+  },
+  "c00022": {
+   "folder": "runs/simscale/cars/c00022",
    "phase": "import",
    "fp": "c303ee8756",
-   "t0": 1795280469.5277448,
+   "t0": 1795284091.286327,
    "attempt": 1,
-   "import_id": "8fa117b2-492d-4611-b702-86f90012bf81",
+   "import_id": "df3ada4b-1652-415f-8d9f-65a224ce63a2",
    "project": "1399685146673566431",
+   "geometry_id": "f4ddf794-34b3-4c0e-8d21-b2437d7406b7",
+   "sim_id": "d01bfcc9-7007-4a3f-a597-71dac98e4cc2",
+   "mesh_op": "4a4a8b39-2a0a-4974-8253-c0b761b52369",
    "tries": [
-    "4500: import FAILED model-has-invalid-geometry ['fault-face-tessellation_failed']"
+    "4500: mesh FAILED surface-meshing-self-intersection-with-position: The meshing failed due to a self intersection in the mesh on the following entities: B1_TE188,B1_TE860. Position: [{\"X\":0.1155804010563308,\"Y\":-5.551115123125E-20,\"Z\":0.01687413028725926}]. [Learn mor"
    ]
   },
-  "c00015": {
-   "folder": "runs/simscale/cars/c00015",
+  "c00024": {
+   "folder": "runs/simscale/cars/c00024",
    "phase": "mesh",
    "fp": "c303ee8756",
-   "t0": 1795280469.5277462,
+   "t0": 1795284091.2863274,
    "attempt": 0,
-   "import_id": "80420d9a-24e8-45a9-86e7-1be2fdb38ee0",
+   "import_id": "ecedad57-a5ab-476f-a13c-6a9fd42615b3",
    "project": "1399685146673566431",
-   "geometry_id": "a0435232-37b2-448a-acf8-030040b621ab",
-   "sim_id": "df9d67f3-eede-4de4-a4c0-1e96d78ddea8",
-   "mesh_op": "daba1bcb-1a2b-4fd0-85d2-99b9068bd6c8"
-  },
-  "c00016": {
-   "folder": "runs/simscale/cars/c00016",
-   "phase": "step",
-   "fp": "c303ee8756",
-   "t0": 1795280469.5277476,
-   "attempt": 2,
-   "import_id": "5c4242c2-8d43-4a31-b78e-0c00f0f293e0",
-   "project": "1399685146673566431",
-   "tries": [
-    "4500: import FAILED model-has-invalid-geometry ['fault-face-bad_face_face', 'fault-face-matching_tessellation_failed', 'fault-face-tessellation_failed']",
-    "5200: import FAILED model-has-invalid-geometry ['fault-face-bad_face_face', 'fault-face-tessellation_failed']"
-   ]
-  },
-  "c00017": {
-   "folder": "runs/simscale/cars/c00017",
-   "phase": "mesh",
-   "fp": "c303ee8756",
-   "t0": 1795280469.5277486,
-   "attempt": 0,
-   "import_id": "daaea837-76f5-4f40-bf55-d49baef860a5",
-   "project": "1399685146673566431",
-   "geometry_id": "803da5e3-5674-441c-bfd2-0dd2043c9ea9",
-   "sim_id": "0a960073-0eec-4747-80ea-5ee424ca703a",
-   "mesh_op": "40d039c8-eb85-4243-a42e-ba31d47a0265"
+   "geometry_id": "5950f905-455b-4c4b-befa-f69b62c06a65",
+   "sim_id": "f87a3395-9bdf-4349-98d7-3a9610207f25",
+   "mesh_op": "2a737f7b-4aef-4178-a616-b7c6a76a0fc2"
   }
  },
  "done": {}

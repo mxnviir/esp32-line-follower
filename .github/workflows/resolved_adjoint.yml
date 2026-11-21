@@ -94,15 +94,29 @@ jobs:
             exit 0
           fi
           # GitHub leaves .head_commit.added/.modified null in push events, so read what the
-          # triggering commit actually changed from git itself (the checkout above is at HEAD).
+          # triggering commit actually changed from git itself. diff-tree shows nothing for
+          # merge commits (push happens after pulling the cloud session's fixes), so fall
+          # back to the whole push range (github event .before .. HEAD).
           git diff-tree --no-commit-id --name-only -r HEAD > /tmp/commit-changed.txt || true
-          echo "files changed by HEAD ($(git rev-parse --short HEAD)):"; cat /tmp/commit-changed.txt || true
           P=""
           while IFS= read -r f; do
             case "$f" in
               .github/resolved_adjoint_state*) P="$f"; break ;;
             esac
           done < /tmp/commit-changed.txt
+          if [ -z "$P" ]; then
+            B=$(jq -r '.before // empty' "$GITHUB_EVENT_PATH" 2>/dev/null || true)
+            if [ -n "$B" ] && git rev-parse -q --verify "$B^{commit}" >/dev/null 2>&1; then
+              git diff --name-only "$B" HEAD 2>/dev/null || true > /tmp/commit-changed.txt
+              echo "range $B..HEAD:"; cat /tmp/commit-changed.txt
+              while IFS= read -r f; do
+                case "$f" in
+                  .github/resolved_adjoint_state*) P="$f"; break ;;
+                esac
+              done < /tmp/commit-changed.txt
+            fi
+          fi
+          echo "HEAD=$(git rev-parse --short HEAD), state file match: '$P'"
           if [ -z "$P" ] || [ ! -f "$P" ]; then
             out "stage=none"   # cleanup commit: every other job skips
             echo "no live launch state (head commit touched: '$P'); no-op run"

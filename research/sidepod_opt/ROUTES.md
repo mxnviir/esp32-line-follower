@@ -363,6 +363,25 @@ external topology case was **not found** in their material (that is not proof it
 - **2026-11-21 01:12, `cloud_lean` (no-pod seed): iteration 0 done.** 493.38 mN whole car (steady),
   adjoint OK. Production checks of its designs run every 3 accepted steps, from its own production
   seed run.
+- **2026-11-21 05:00, `cloud_lean` (no-pod seed): the steady model grows a pod; production barely confirms it.**
+
+  | design | steady D20 whole car | pod | production half car (fresh) | vs no pod |
+  |---|---|---|---|---|
+  | 0 (no pod) | 493.38 mN | 5.0 cm³ | 206.19 ± 0.33 | |
+  | 3 | 484.45 | 9.2 | | |
+  | 4 | 479.52 | 10.8 | 203.91 ± 0.34 | **−2.28** |
+  | 5 | re-based 476.29; candidate rejected | | | |
+  | 7 | 473.66 | ~12 | 204.30 | **−1.89** |
+
+  - Steady: −19.7 mN whole car (−4.0 %) in 7 iterations, gains accelerating once the pod passed
+    ~8 cm³. Production: −2.3 then −1.9 mN half car, where the steady model says −6.9 then −9.9:
+    ratio ~0.3, and steps 5–7 add nothing in production.
+  - The team's pod is worth −25.3 mN half car in production. **From no pod, this method recovers
+    < 10 % of that.** The steady model's compass is much weaker on a small, young pod than on
+    the team's (ratio 0.8–0.9 for the big early steps there).
+  - Stop rule: this is the first production check without a gain. One more after ~3 accepted
+    steps; if that doesn't gain > 1 mN either, the run stops. **Conclusion so far: a good
+    starting shape matters, and the method improves a pod far better than it invents one.**
 
 ## Sources
 

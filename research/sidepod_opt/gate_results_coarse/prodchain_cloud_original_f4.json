@@ -1,0 +1,30 @@
+{
+ "seed_D20_half_N": 0.1808490822801793,
+ "seed_mesh": "fresh",
+ "links": [
+  {
+   "it": 4,
+   "D20_half_N": 0.17246327499549552,
+   "stderr_N": 0.0007806308866162426,
+   "converged": true,
+   "morph_fallback": false,
+   "fresh_base": true,
+   "from": "refA_coarse",
+   "wall_s": 365.3,
+   "change_vs_seed_mN": -8.385807284683771,
+   "change_vs_prev_mN": -8.385807284683771
+  },
+  {
+   "it": 6,
+   "D20_half_N": 0.1717535099656354,
+   "stderr_N": 0.0009082556140995312,
+   "converged": true,
+   "morph_fallback": false,
+   "fresh_base": false,
+   "from": "run_8530_96a4d873c999",
+   "wall_s": 348.1,
+   "change_vs_seed_mN": -9.095572314543887,
+   "change_vs_prev_mN": -0.7097650298601155
+  }
+ ]
+}

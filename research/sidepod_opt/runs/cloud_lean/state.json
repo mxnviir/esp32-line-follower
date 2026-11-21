@@ -1,20 +1,20 @@
 {
- "it": 9,
+ "it": 10,
  "step_mm": 0.75,
- "T_current": 0.7690445150104133,
- "D_current": 0.4712227126887909,
- "run_current": "/home/user/esp32-line-follower/part2-simulation/cfd_case_template/runs/run_28793_4528308547b8",
+ "T_current": 0.7686719715717584,
+ "D_current": 0.46925057206918197,
+ "run_current": "/home/user/esp32-line-follower/part2-simulation/cfd_case_template/runs/run_14607_3533f79af58d",
  "mass_current": {
-  "foam_g": 16.98223748635156,
-  "lead_g": 8.693916791851514,
+  "foam_g": 17.13133976901537,
+  "lead_g": 8.544814509187706,
   "car_g": 48.2,
   "legal": true,
   "race_mass_g": 69.35,
-  "com_x_car_mm": 160.86247011714573,
-  "com_z_mm": 23.362334566857893
+  "com_x_car_mm": 160.89496089390462,
+  "com_z_mm": 23.349557818184785
  },
  "grad_ready": true,
- "L_current": 0.22569825048106168,
- "best_it": 8,
- "stale_grad": 0
+ "L_current": 0.22812573260778576,
+ "best_it": 9,
+ "stale_grad": 1
 }

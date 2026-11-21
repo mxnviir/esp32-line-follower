@@ -14,6 +14,41 @@ cloud session and the codespace push to it too).
 **Read next, in this order:** `research/sidepod_opt/ROUTES.md` (the dated status log, the single
 source of truth: append to it, never rewrite history), then the rest of this file.
 
+## 0. Morning briefing (written 2026-11-21 02:15 UTC by the cloud session)
+
+**What happened overnight** (details: ROUTES.md status log, 18:45 onwards):
+1. **Gradient check passed:** 3/3 bump pairs, ratios 0.66 / 1.09 / 0.97, r = 0.98.
+2. **`shape_loop.py` v1 would not have worked** (dry run: 18 voxels per step); **v2** fixes it
+   (sub-voxel field, percentile-clipped step, race-time objective, morph-first meshing, accept
+   margin, re-basing, stale-gradient fallback, `run_loop_here.sh` wrapper). See §4.
+3. **Run `cloud_original` (team pod seed) converged**, best design `runs/cloud_original/it_008/car`:
+   - steady model: −33.2 mN whole car (−7.4 %);
+   - **production model: −8.2 to −10.4 mN half car (−4.5 to −5.7 %, ≈ 3–4 ms)**. The early big
+     steps transfer (81–89 %); the late polish (designs 6–8) doesn't. Production-best: design 6
+     (−9.10) ≈ 3 (−9.05) ≈ 8 (−8.16), all within noise.
+   - render: `runs/cloud_original/shape_change_final.png`. Changes: outer front corner chamfered,
+     inboard leading face filled, rear lower outer corner boat-tailed, scoop high at x ≈ 150 mm,
+     mid sides fuller, outer flank pulled in.
+4. **Run `cloud_lean` (no-pod seed) is running** on the cloud machine. Steps 1–2 accepted
+   (493.38 → 491.48 mN steady), but slowly: 46 % of its gradient wants the mandatory cargo cover
+   gone, and growth gains are ~11 % of first order. It may show that the method can't invent a
+   pod from nothing. Production baseline: no pod 206.19 vs team pod 180.85 mN half car (fresh
+   meshes): the team pod is worth 12.3 %.
+
+**Method rule learned tonight:** production-check every ~3 accepted steps (`prodcheck.py`,
+`prodchain.py`), keep the production-best design, and stop a run when production stops improving.
+The steady model is a good compass for big moves and a poor judge of fine polish.
+
+**Your first actions:**
+1. `git pull`. Check `cloud_lean`: if the cloud session is gone, its state is in
+   `runs/cloud_lean/`. Resume it on a Codespace with `run_loop_here.sh cloud_lean lean`; it needs
+   `/swapfile` or ≥ 24 GB RAM, and Docker.
+2. On a Codespace with ≥ 16 cores, run the remaining seeds (`block`, `channel`, `blend`) with
+   `run_loop_here.sh` (one per 4 cores), plus production checks every ~3 accepted steps.
+3. Medium-mesh production check of `cloud_original`'s designs 3, 6 and 8 against the team pod
+   (task 4): the coarse mesh is all we have so far.
+4. Tell the owner the result above in plain words.
+
 ---
 
 ## 1. The project

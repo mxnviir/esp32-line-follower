@@ -902,6 +902,13 @@ external topology case was **not found** in their material (that is not proof it
     0.2 mm is fragile in its own right); if they spread over ~3 mN, the two flow states are a mesh effect.
     Same reading for design 8 around its first value, 178.3. σ_medium is re-estimated from frame shifts
     only.
+- **2026-11-21 17:15, groove on clean repeat meshes (same STL, frame shifted 0.37 / 0.74 mm): 174.86, 175.02, 175.57 mN.**
+  - Mean 175.15, sd 0.37: the same mesh noise as the team pod (sd 0.38). Mark of 16:05: both shifted
+    meshes within 1 mN of 174.8 → **met**. So the 178.11 of `channel_m05` came from that copy's
+    geometry change (surface moved by up to 0.19 mm on its whole moved region), not from the mesh:
+    the groove's drag jumps ~3 mN for a 0.2 mm change somewhere on the pod. Worth knowing before milling.
+  - Groove vs team pod on medium (clean groove, team's 4 meshes): **−4.6 ± 0.3 mN**.
+  - Design 8 next (same test), then team~1.
 
 ## Sources
 

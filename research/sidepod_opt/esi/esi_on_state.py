@@ -111,7 +111,25 @@ b = (out / "constant" / "polyMesh")
 P = oa.read_polymesh_points(str(out))
 bd = oa._read_boundary(b.joinpath("boundary").read_text())
 start, nf = bd["car"]
-faces = oa._read_faces(b.joinpath("faces").read_text(), start, nf)
+def car_faces(path, start, nf):
+    """Faces start..start+nf of an ASCII faceList, streamed line by line (a 5 M-cell mesh has ~15 M faces:
+    reading the whole file into one regex, as Part 2's helper does, needs many GB)."""
+    out, i, body = [], -1, False
+    with open(path, "r", errors="replace") as fh:
+        for line in fh:
+            if not body:
+                if line.strip() == "(":
+                    body, i = True, 0
+                continue
+            if i >= start + nf:
+                break
+            if i >= start:
+                s = line.strip()
+                out.append(np.array(s[s.index("(") + 1:s.rindex(")")].split(), dtype=np.int64))
+            i += 1
+    assert len(out) == nf, (len(out), nf)
+    return out
+faces = car_faces(b / "faces", start, nf)
 avec = np.zeros_like(P)
 for f in faces:
     v = P[list(f)]

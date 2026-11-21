@@ -663,6 +663,24 @@ external topology case was **not found** in their material (that is not proof it
     included, so design loops must run on a mesh whose body drag has converged (medium or finer),
     and the −4.5 to −5.7 % claim for design 8 is withdrawn. The steady-model gradient check stays
     valid as a check of the adjoint against its own model.
+- **2026-11-21 10:00, medium mesh, all five in: four of five agree with the coarse mesh, the adjoint design is the exception.**
+
+  | car (half car, production, cold, 2,000 its) | medium total | vs team pod | coarse said | body (pressure part) | wheels |
+  |---|---|---|---|---|---|
+  | groove | 174.86 mN | −5.0 | −5.5 | 23.7 (10.9) | 151.1 |
+  | adjoint design 8 | 178.32 | −1.5 | −10.4 | 23.8 (11.1) | 154.5 |
+  | team pod | 179.86 | 0 | 0 | 22.0 (8.4) | 157.8 |
+  | 3 windows | 180.93 | +1.1 | +2.0 | 31.9 (19.4) | 149.1 |
+  | no pod | 204.23 | +24.4 | +25.3 | 38.3 (28.5) | 165.9 |
+
+  - **Pass marks (set 09:30):** windows +1.1 is inside [0, +4]; no pod +24.4 is inside
+    [+23.3, +27.3]; the groove is within 2 mN of coarse. Those three hold. The order is the same
+    except for the adjoint design, which drops from first to second and loses 8.9 mN of its lead.
+  - All five converged; 200-iteration block means are steady to ±0.2 mN (no pod ±0.3).
+  - Body/wheel split: every pod trades body drag against wheel drag. Windows cost about 10 mN of
+    body pressure drag and give back about 9 mN at the wheels, a near wash on both meshes.
+  - Controls A and B (coarse cold start; second medium meshes) are running; verdict on the
+    adjoint number waits for them.
 
 ## Sources
 

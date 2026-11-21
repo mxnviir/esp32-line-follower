@@ -6,6 +6,60 @@ Started 2026-11-20. This is a living log: every result gets a dated entry under 
 (channels, tunnels, undercuts, organic surfaces), judged by real turbulent CFD at the car's
 Reynolds number (~2.7×10⁵, k-ω SST).
 
+## SELECTED ROUTE (current, 2026-11-21 17:20): multi-start free-form adjoint shaping, every step checked by CFD
+
+This replaces the earlier plans below (route A as first written, the parts-kit "recipes" of route G, and any
+neural-network predictor). The status log keeps the history.
+
+**Owner's requirements this follows**
+- Organic, free-form geometry: thin walls, ribs, tunnels, structure grown where it helps, not blobs.
+  Shapes are **not** described by parameters. Only locations are numbers: halo fore/aft, rear wheel
+  fore/aft, wheelbase, front wing / rear wing / nose fore/aft and up/down (NACA 0015, no tilt).
+- Every candidate is scored by real CFD; no model predicts performance in place of CFD.
+- Limited compute.
+- Objective: race time from the race-time model (drag, lift, mass, COM, ballast in the halo canister).
+- Prefer the normal (continuous) adjoint, because the discrete adjoint's memory is too high.
+- Materials: milled foam pods with 3 mm minimum walls; ABS printed parts (0.2 mm nozzle); no
+  through-hole rule.
+
+**The method**
+1. **Shape:** each foam or printed part is a solid/air field on a 1 mm grid inside its legal volume
+   (hundreds of thousands of values). Every field is built legally: 3-axis milling, 3 mm walls, rules,
+   mass/COM, lead ballast to the weight floor (`shape_loop.build_design`).
+2. **Steps:** an adjoint gives the drag gradient over the whole surface from one solve. The surface
+   grows or carves along the race-time gradient (drag + mass/COM price). Each step is built, meshed
+   and solved, and accepted only if race time improves (`shape_loop.py` v2).
+3. **New features:** the same adjoint solution gives a topological derivative: where inserting new
+   solid (a rib, a wall, an island) would lower drag. The loop inserts it there and CFD confirms or
+   rejects it. Holes/tunnels in foam (no flow inside the solid to differentiate) are tried as a few
+   candidates where the flow suggests a passage, each kept only if CFD confirms. Published for laminar
+   flow only (Amstutz), so it is treated as a hint, never as truth.
+4. **Several different starts**, because each run is local: the full legal block carved down, the team
+   pod, and nothing (more if compute allows: a pod with a through-tunnel, a split pod). The best result
+   wins. This is a wide search, not an exhaustive one: "best found from these starts at this budget".
+5. **Locations** (halo, wheels, wheelbase, wings, nose): a small number of CFD-scored layout changes
+   around the best shape, alternating with shape steps. The exact layout search is still to be agreed
+   with the owner; every candidate is CFD'd.
+6. **Final check:** the best designs on clean repeat meshes (same STL, shifted frame) and on finer
+   meshes before anything is milled.
+
+**Gates before the loop runs (in order)**
+1. **Scoring mesh:** medium must rank designs like the fine and 5 M meshes (`fine_campaign/`, marks
+   M1–C5). The coarse mesh is out: it invented ~10 mN of body drag. Running now: clean medium repeats.
+2. **Which adjoint:** the normal (ESI) adjoint on the coarse mesh without wall layers got signs right
+   but only 2–25 % of the size. Ruled out as causes: turbulence, Reynolds number, grid terms. Leading
+   suspect: no boundary-layer cells. Decisive test: `esi/run_resolved_test.sh` on the owner's PC
+   (~5 M cells, wall layers; marks L, A1, r ≥ 0.9, signs, size within 0.5–2×).
+   - If it passes, the loop uses the normal adjoint on a wall-resolved mesh.
+   - If it fails, it uses the discrete adjoint (DAFoam, 66–109 % accurate) on the medium mesh with
+     ~128 GB of memory, or steps are scored without an adjoint.
+3. **Steady model on that mesh:** the adjoint needs a flow that settles (mark A1); the first-order
+   scheme must still settle there.
+
+**Explicitly dropped:** shape parameters/recipes; neural-network predictors; scoring or loops on the
+coarse mesh; GitHub-hosted runners as compute; "repeat meshes" made by nudging the design (they changed
+the geometry by 0.2–1.5 mm; repeats now shift the meshing frame).
+
 ## Where we stand
 
 | What was tried | Result | What it does and doesn't prove |

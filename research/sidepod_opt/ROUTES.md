@@ -382,6 +382,44 @@ external topology case was **not found** in their material (that is not proof it
   - Stop rule: this is the first production check without a gain. One more after ~3 accepted
     steps; if that doesn't gain > 1 mN either, the run stops. **Conclusion so far: a good
     starting shape matters, and the method improves a pod far better than it invents one.**
+- **2026-11-21 05:20, how to get invention: literature and plan (route E, "explore, then refine").**
+  Owner's question after the two runs: can anything invent its own geometry well?
+  - **Why the adjoint loop can't, by itself.** It is a local method, and the literature treats
+    that as a known property: aerodynamic design spaces opened up to new concepts are multimodal
+    (Chernukhin & Zingg; Bons et al. 2019), and a gradient method lands in the basin it starts in.
+    Our two runs are a clean example: from the team's pod, −5 % (production); from no pod, < 10 %
+    of the team pod's benefit recovered.
+  - **What the literature uses for invention:**
+    1. *Global search plus adjoint refinement* (memetic / hybrid): an evolutionary or surrogate
+       search finds the basins, the adjoint polishes inside them (Kontoleontos, Asouti &
+       Giannakoglou 2012, CFD shape optimisation; Zingg's hybrid and multistart optimisers).
+    2. *Surrogates that eat adjoint gradients* (gradient-enhanced kriging, Bayesian optimisation
+       with gradients): each CFD + adjoint gives a value and a whole gradient, so the global model
+       needs far fewer runs (Bouhlel & Martins; Wang et al. 2018; Müller et al. 2024).
+    3. *Quality-diversity search* (MAP-Elites, SAIL): returns many different good designs, not
+       one; shown on 2D airfoils and a 3D velomobile with real flow simulation (Gaier et al.).
+       `methods.py` already has `sail`, `bo`, `cma`, `neat`.
+    4. *Topological derivatives with level sets*: a map of where inserting material helps, used to
+       nucleate new features that a level set alone never creates (Allaire et al.; Amstutz 2005 for
+       Navier-Stokes; Sá & Novotny for channels). Published for Stokes/laminar internal flow only.
+  - **What tonight's numbers make possible.** A production-scheme coarse solve on a fresh mesh
+    costs ~6 min on 2 cores, with ~1 mN mesh scatter; concepts differ by tens of mN (no pod vs
+    team pod: 25 mN half car). So a global search can be scored **directly by the production
+    model**: ~20 designs an hour on this 4-core machine, ~150 an hour on 32 cores. The steady model
+    and the adjoint (45 min a step) are only needed for the refinement stage, where they work.
+  - **Route E:**
+    1. *Explore*: quality-diversity / Bayesian search over a low-dimensional concept space (the
+       lattice or CPPN representations in `design.py`), every design milled, rule-checked and scored
+       by production coarse CFD on a fresh mesh; 200–500 designs.
+    2. *Refine*: `shape_loop.py` from the best 3–5 distinct concepts, production check every
+       3 accepted steps, stop when production stops improving.
+    3. *Verify*: medium mesh, then a physical test.
+    Optional research add-on: a topological-sensitivity map from DAFoam (its `alphaPorosity`
+    derivative on the real-wall flow) to propose where to seed new material.
+  - **Probe running now** (production, fresh meshes): blends of no pod → team pod at 50 / 75 / 90 %,
+    the full `block` and the `channel` seed. It shows whether the landscape between "no pod" and
+    "pod" is a smooth slope (then the steady model's compass is what failed) or has a plateau or
+    valley (then no local method can cross it), and gives the first concept-scale scores.
 
 ## Sources
 
@@ -395,3 +433,8 @@ external topology case was **not found** in their material (that is not proof it
 - [Chalmers: adjoint optimisation of ground vehicles (DrivAer, unstable in separated flow)](https://odr.chalmers.se/items/e625457f-41b4-481d-baaf-8f31e7097bbe)
 - [Siemens: adjoint shape optimisation for car aerodynamics](https://blogs.sw.siemens.com/simcenter/adjoint-shape-optimization-for-improved-car-aerodynamics/)
 - [Siemens: topology optimisation in STAR-CCM+](https://blogs.sw.siemens.com/simcenter/topology-optimization-cfd-creating-designs-like-nature/)
+- [Bons, He, Mader, Martins: multimodality in aerodynamic wing design optimization (2019)](https://mdolab.engin.umich.edu/bibliography/Bons2019a); [Bristol: global optimization of multimodal aerodynamic benchmarks](https://research-information.bris.ac.uk/en/publications/global-optimization-of-multimodal-aerodynamic-optimization-benchm/)
+- [Kontoleontos, Asouti, Giannakoglou: asynchronous metamodel-assisted memetic algorithm for CFD-based shape optimization (2012)](https://www.bohrium.com/paper-details/an-asynchronous-metamodel-assisted-memetic-algorithm-for-cfd-based-shape-optimization/811650189788971008-4135)
+- [Bouhlel & Martins: gradient-enhanced kriging for high-dimensional problems](https://arxiv.org/pdf/1708.02663.pdf); [Wang et al.: adjoint + gradient-enhanced kriging (ICAS 2018)](https://www.icas.org/icas_archive/ICAS2018/data/papers/ICAS2018_0715_paper.pdf); [Müller et al.: Bayesian optimisation with adjoint gradients (Stanford CTR 2024)](https://web.stanford.edu/group/ctr/ctrsp24/ii05_MULLER.pdf)
+- [Gaier, Asteroth, Mouret: surrogate-assisted illumination (SAIL)](https://arxiv.org/html/1702.03713); [aerodynamic design exploration through SAIL](https://www.researchgate.net/publication/318142887_Aerodynamic_Design_Exploration_through_Surrogate-Assisted_Illumination)
+- [Amstutz: the topological asymptotic for the Navier-Stokes equations (2005)](https://www.esaim-cocv.org/articles/cocv/pdf/2005/03/cocv0404.pdf); [Sá, Novotny et al.: topological derivatives for fluid flow channel design](https://novotny.lncc.br/download/papers/50); [hole seeding in level-set topology optimization](https://arxiv.org/pdf/1909.10703)

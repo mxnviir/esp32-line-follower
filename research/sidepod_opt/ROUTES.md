@@ -524,6 +524,30 @@ external topology case was **not found** in their material (that is not proof it
   2. a topology-capable adjoint loop for refinement: nucleation from a topological-sensitivity map
      (where adding solid in air cuts drag), holes opening when thin walls' faces meet, less
      smoothing and a finer pod mesh so rib-scale detail survives.
+- **2026-11-21 06:30, concept and window results, and an honest assessment of the inventing routes.**
+  - **Concepts** (production, fresh meshes, half car): no pod 206.2; blend 50 % 212.3; 75 % 201.1;
+    90 % 185.5; team pod 180.9; **team pod + 8 mm outboard groove 175.4 (−5.5, −3 %)**; adjoint
+    design 8 170.5–172.7; whole block 251.8. The path from no pod to a pod rises before it falls
+    (a valley no local method crosses), and a single topological feature (the groove) gains 2/3 of
+    what the whole adjoint run did.
+  - **3-window pod: 182.8 ± 0.8 (+2.0 vs the team pod).** Lead replaces the removed foam at the same
+    48.2 g, so race time moves only through drag and COM: about +0.7 ms. Significance waits on the
+    fresh-mesh repeats.
+  - **Assessment (owner's question):**
+    - *Generative global search is not industry practice:* industry uses parametric/morph +
+      sampling + surrogate + adjoint polish on engineer-chosen concepts. Its parts are proven
+      separately: metamodel-assisted EAs with CFD (Giannakoglou), quality diversity with CFD
+      (Gaier et al.), CPPN generative encodings for 3D objects (no CFD-drag use found).
+    - *Estimates:* beats the team pod in production ~60–70 %; beats the adjoint result ~35–50 %;
+      invents winning rib/window geometry ~25–35 %. Earlier estimates for the adjoint were 40–50 %
+      to beat the team pod (it did, −5 %) and 15–25 % to invent (it didn't).
+    - *Copy from the literature:* surrogate pre-screening, a QD archive with descriptors (pod volume,
+      open area, COM z), a surrogate on D20/L20 with race time computed exactly, coarse search and
+      medium confirmation.
+    - *Topology-changing adjoint:* ~10–20 %. Published only for 2D, laminar or low-Re flows. Tonight's
+      evidence (fine changes don't transfer to production; a young pod transferred ~30 %) is
+      against it. Use topological sensitivities as hints inside the global search, not as the
+      inventor.
 
 ## Sources
 

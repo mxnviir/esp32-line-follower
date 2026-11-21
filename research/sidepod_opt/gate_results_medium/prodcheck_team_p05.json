@@ -1,0 +1,14 @@
+{
+ "D20_half_N": 0.17924276107324505,
+ "wall_s": 1932.7,
+ "converged": true,
+ "residual_p": 0.0021019917622263364,
+ "force_osc": 0.048602923341203114,
+ "force_drift": 0.002562708753578646,
+ "run_dir": "",
+ "force_mean_stderr": 0.001539477272665515,
+ "morph_fallback": false,
+ "folder": "runs/concepts/seed_p05/car",
+ "scheme": "production linearUpwind",
+ "mesh": "fresh"
+}

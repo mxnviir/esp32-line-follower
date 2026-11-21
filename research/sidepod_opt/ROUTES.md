@@ -721,6 +721,13 @@ external topology case was **not found** in their material (that is not proof it
     If σ_medium > 2 mN, the medium mesh with this steady solver can't score a search (each design
     would need ≥ 4 meshes), and the scoring model has to change (time-accurate averaging, a
     steadier discretisation checked against it, or a finer mesh) before any search is built on it.
+- **2026-11-21 11:15, control B, second half: the team pod repeats to 0.6 mN on a second medium mesh.**
+  - Team pod: 179.86 and 179.24 mN (body 22.0 / 22.3, wheels 157.8 / 157.0). Design 8: 178.32 and
+    174.26. So the large scatter seen at 10:45 belongs to design 8, not (so far) to the mesh in
+    general. Reading, to be tested by the repeat queue: an adjoint-polished shape sits close to a
+    flow switch (separation or wheel-wake state), so tiny mesh changes flip it. A design whose
+    drag depends on the mesh draw by 4 mN is not a robust design even if its mean is lower.
+  - `gate/medium_table.py` prints every medium result with its body/wheel split and the pooled σ.
 
 ## Sources
 

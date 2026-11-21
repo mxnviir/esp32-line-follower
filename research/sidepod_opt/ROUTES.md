@@ -565,6 +565,33 @@ external topology case was **not found** in their material (that is not proof it
     built. Highest-value spend: mill 3–4 deliberately different pods (team, adjoint-polished,
     grooved, windowed) and time them against the CFD ranking; alongside, a mesh-refinement study
     and time-accurate runs on the same four.
+- **2026-11-21 07:00, route G: a construction kit and a map-keeping search, not seed shapes (owner: seeds
+  cap creativity; the system must decide what exists and what connects).**
+  - **Given** (mostly by the regulations): fixed points (axles, wheels, chamber, halo, cargo, NACA 0015
+    wing sections, guides), legal volumes for foam and ABS, building blocks, a referee.
+  - **Building blocks:** *bodies* (a centre line with a width/height profile along it: pods, nose,
+    loft) and *members* (struts or ribs between two points with a thickness).
+  - **Decided by the search:** how many bodies and members exist (zero allowed), where each starts
+    and ends and which parts it joins, their profiles, the layout numbers, ballast and COM.
+  - **Search:** quality diversity (MAP-Elites / SAIL, `methods.py`) with conditional variables (a
+    part's settings exist only if the part does; SMT 2.0 / decreed variables in aircraft design).
+    Map axes such as rear-pod volume, nose width, member count: the best car in every cell, so
+    "with and without rear pods" are both optimised and compared, and no path has to cross the
+    measured valley between "no pod" and "pod".
+  - **Inner loop:** supports grown by a seconds-long structural solve per candidate (PARTS_PLAN).
+  - **Scoring:** legality → production CFD → exact race time. **Polish:** the adjoint loop on the
+    map's best few. **Seeds** (e.g. the owner's 50 sidepods): optional head start in the first
+    population, never a boundary.
+  - **Halo loft:** its profile numbers go in the global search; "smallest loft then adjoint" is local.
+  - **Risks:** thin members are where the flow model and the coarse mesh are weakest (windows got
+    worse with count on this mesh); a large build (kit, structural check, whole-car builder,
+    robust meshing); most random kit designs are poor (surrogate screening).
+  - **Staging:** (1) prototype with two decisions, sidepod shape and rear pods or none;
+    (2) nose with auto-grown wing supports; (3) loft, layout, ballast; (4) adjoint polish and a
+    finer mesh.
+  - **Paper framing:** "best possible" isn't provable; defensible: the best found by a documented
+    search at a stated budget, the map explaining each choice, ablations, finer-mesh and track
+    confirmation.
 
 ## Sources
 
@@ -583,3 +610,5 @@ external topology case was **not found** in their material (that is not proof it
 - [Bouhlel & Martins: gradient-enhanced kriging for high-dimensional problems](https://arxiv.org/pdf/1708.02663.pdf); [Wang et al.: adjoint + gradient-enhanced kriging (ICAS 2018)](https://www.icas.org/icas_archive/ICAS2018/data/papers/ICAS2018_0715_paper.pdf); [Müller et al.: Bayesian optimisation with adjoint gradients (Stanford CTR 2024)](https://web.stanford.edu/group/ctr/ctrsp24/ii05_MULLER.pdf)
 - [Gaier, Asteroth, Mouret: surrogate-assisted illumination (SAIL)](https://arxiv.org/html/1702.03713); [aerodynamic design exploration through SAIL](https://www.researchgate.net/publication/318142887_Aerodynamic_Design_Exploration_through_Surrogate-Assisted_Illumination)
 - [Amstutz: the topological asymptotic for the Navier-Stokes equations (2005)](https://www.esaim-cocv.org/articles/cocv/pdf/2005/03/cocv0404.pdf); [Sá, Novotny et al.: topological derivatives for fluid flow channel design](https://novotny.lncc.br/download/papers/50); [hole seeding in level-set topology optimization](https://arxiv.org/pdf/1909.10703)
+- [SMT 2.0: hierarchical and mixed-variable Gaussian processes](https://ar5iv.labs.arxiv.org/html/2305.13998); [meta and decreed variables](https://arxiv.org/pdf/2506.22621v3); [mixed-categorical GPs for aircraft design](https://www.arxiv.org/pdf/2402.04711)
+- [MAP-Elites with topology optimisation (soft robots)](https://arxiv.org/pdf/2407.07591); [MAP-Elites for diverse structural designs](https://eprints.whiterose.ac.uk/id/eprint/210793/1/EBB_CEC_2024.pdf)

@@ -20,6 +20,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("sens"); ap.add_argument("results")
     ap.add_argument("--sites", nargs="*", default=None)
+    ap.add_argument("--out", default=None, help="verdict file (default <results>/pair_judge.json)")
     a = ap.parse_args()
     S = np.load(a.sens); X, Gd = S["Xs"], S["dD_dXs"]
     R = Path(a.results)
@@ -47,7 +48,8 @@ def main():
         out.update(signs=f"{int(sg.sum())}/{len(use)}", ratio_pred_over_meas=(p / m).tolist(),
                    pearson_r=float(np.corrcoef(m, p)[0, 1]) if len(use) >= 3 else None)
     print(json.dumps(out, indent=1))
-    (R / "pair_judge.json").write_text(json.dumps(out, indent=1))
+    out["sens_file"] = str(a.sens)
+    Path(a.out or R / "pair_judge.json").write_text(json.dumps(out, indent=1))
 
 
 if __name__ == "__main__":

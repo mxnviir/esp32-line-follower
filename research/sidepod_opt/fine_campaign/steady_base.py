@@ -37,7 +37,7 @@ if not (dst / "STEADY_DONE").exists():
     dp = dst / "system" / "decomposeParDict"
     if dp.exists():
         dp.write_text(re.sub(r"numberOfSubdomains\s+\d+;", f"numberOfSubdomains {n};", dp.read_text()))
-    sh = f"""set -e; source {bashrc}; export OMPI_ALLOW_RUN_AS_ROOT=1 OMPI_ALLOW_RUN_AS_ROOT_CONFIRM=1
+    sh = f"""source {bashrc} || true; set -e; export OMPI_ALLOW_RUN_AS_ROOT=1 OMPI_ALLOW_RUN_AS_ROOT_CONFIRM=1
 cd {dst}; decomposePar -force -latestTime > log.decompose 2>&1
 mpirun -np {n} simpleFoam -parallel > log.simpleFoam 2>&1
 reconstructPar -latestTime > log.reconstruct 2>&1; rm -rf processor*"""

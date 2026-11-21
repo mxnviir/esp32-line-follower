@@ -1,0 +1,35 @@
+{
+ "pairs": [
+  {
+   "site": "pod_rear",
+   "measured_half_mN": -1.5003440919806321,
+   "predicted_half_mN": -0.1353966246875908,
+   "stderr_mN": 0.002530691286140391,
+   "usable": true
+  },
+  {
+   "site": "pod_front_low",
+   "measured_half_mN": -0.689740597228497,
+   "predicted_half_mN": -0.01135585164259539,
+   "stderr_mN": 0.0025068447604502495,
+   "usable": true
+  },
+  {
+   "site": "pod_rear_top",
+   "measured_half_mN": 0.2506314079441796,
+   "predicted_half_mN": 0.062065273908733856,
+   "stderr_mN": 0.0024704155247718884,
+   "usable": true
+  }
+ ],
+ "n_pairs": 3,
+ "n_clear": 3,
+ "signs": "3/3",
+ "ratio_pred_over_meas": [
+  0.09024371503263043,
+  0.01646394555899024,
+  0.24763565914514984
+ ],
+ "pearson_r": 0.982060764641335,
+ "sens_file": "gate_results_coarse_up/esi/esi_sens_sst.npz"
+}

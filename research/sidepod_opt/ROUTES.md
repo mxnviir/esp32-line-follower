@@ -800,6 +800,30 @@ external topology case was **not found** in their material (that is not proof it
   - Lesson for the campaign: two meshes per design can't reveal a two-state design. The fine/resolved
     forward runs keep 2 meshes for most designs (cost), so their single-design verdicts carry this
     caveat; the team pod, groove and design 8 should get ≥ 3 meshes there (README updated).
+- **2026-11-21 14:10, OpenFOAM's own (ESI) adjoint, re-tested fairly: right direction, wrong sizes. Stays retired.**
+  - **Why it was retired:** (1) 2026-07-27 its full-turbulence adjoint (adjointkOmegaSST) crashed
+    with a floating-point error on this car, so frozen turbulence (adjointLaminar) was used; (2)
+    2026-11-20 the frozen version failed the bump check (r −0.5, signs 0–4/8). That check was
+    later found confounded (adjoint on a 375 k mesh, bumps on 520 k, unsteady flow), so ESI had never
+    been fairly tested.
+  - **Why re-test now:** ESI's memory is a few times the forward run's, so it would fit a 5 M-cell
+    mesh on modest hardware, where DAFoam needs ~0.5–1 TB. One run on the coarse steady state where
+    DAFoam passed, against the same six bumps (`esi/esi_on_state.py`; ~2–3 min each on 2 cores).
+  - **Result** (measured / ESI frozen / ESI full SST / DAFoam half-differences, mN):
+
+    | site | measured | ESI frozen | ESI SST | DAFoam ratio |
+    |---|---|---|---|---|
+    | pod_rear | −1.500 | −0.140 (0.09×) | (0.09×) | 1.09× |
+    | pod_front_low | −0.690 | −0.012 (0.02×) | (0.02×) | 0.66× |
+    | pod_rear_top | +0.251 | +0.061 (0.24×) | (0.25×) | 0.97× |
+
+    Signs 3/3 and r 0.98 for both ESI versions (the SST adjoint ran without crashing on the steady
+    flow), but the sizes are 2–25 % of measured and differ 14× between sites. A step along that
+    gradient would move the wrong places in the wrong proportions. DAFoam: 66–109 %.
+  - **Verdict:** ESI as configured stays retired. One specific, untested cause remains: our setup
+    drops the mesh-movement (volume) terms of ESI's sensitivity (`includeMeshMovement false`), which
+    ESI's own formulation includes by default. That the frozen and full-turbulence versions agree so
+    closely points at a term both share, not at turbulence. Not pursued unless the owner asks.
 
 ## Sources
 

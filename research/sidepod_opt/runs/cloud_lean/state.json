@@ -1,9 +1,9 @@
 {
  "it": 5,
  "step_mm": 1.5,
- "T_current": 0.7706095756811135,
- "D_current": 0.4795240930925646,
- "run_current": "/home/user/esp32-line-follower/part2-simulation/cfd_case_template/runs/run_23289_aec658fb037a",
+ "T_current": 0.7699975274356671,
+ "D_current": 0.47629316701453256,
+ "run_current": "/home/user/esp32-line-follower/part2-simulation/cfd_case_template/runs/run_492_5524447e01b7",
  "mass_current": {
   "foam_g": 16.53899732194663,
   "lead_g": 9.137156956256444,
@@ -14,7 +14,7 @@
   "com_z_mm": 23.391193587022762
  },
  "grad_ready": true,
- "L_current": 0.21858639058541313,
+ "L_current": 0.22248530065471905,
  "best_it": 4,
  "stale_grad": 0
 }

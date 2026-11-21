@@ -779,6 +779,14 @@ external topology case was **not found** in their material (that is not proof it
   - **Runs on this machine next (after the medium scatter queue):** a plumbing smoke test of every
     stage on coarse (not committed), `bccheck`, and the medium runs still missing (blend 50/75, 5
     windows, second meshes of no pod and 3 windows), which make C2 testable on medium.
+- **2026-11-21 13:05, design 8 on three medium meshes: 178.32, 176.21, 174.26 mN (mean 176.26, sd 2.0).**
+  - Against the team pod (3 meshes, mean 179.71, sd 0.4): **−3.5 ± 1.2 mN** (SE from each design's own
+    sd), about 2.9 SE: borderline. So the adjoint design keeps roughly a third of its coarse gain on
+    medium, about 2 %, not the "−1.5 mN" of the single 09:30 draw and not the coarse −10.4.
+  - Its drag moves with the mesh five times more than the team pod's or the groove's (sd 2.0 vs 0.4
+    and 0.1): a design sitting near a flow switch. A real gain that depends on the mesh draw is a
+    robustness problem for a car that has to be built and raced.
+  - The fine/resolved forward runs (mark C5) decide it; until then: "a small gain, not established".
 
 ## Sources
 

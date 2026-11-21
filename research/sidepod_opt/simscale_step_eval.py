@@ -155,6 +155,8 @@ class SimScaleStepEvaluator:
 
     def _retire(self, fp, why):
         self.st["keys"][fp]["retired"] = str(why)[:200]
+        self.st.setdefault("events", []).append({"t": time.time(), "event": "key_retired", "key": fp,
+                                                 "runs_on_key": self.st["keys"][fp]["runs"], "why": str(why)[:200]})
         for cid, c in self.st["cases"].items():                       # its unfinished cases go to the next key
             if c.get("fp") == fp and c["phase"] != "run":
                 c.update(fp=None, phase="wait", attempt=0)
@@ -350,7 +352,25 @@ class SimScaleStepEvaluator:
             if run.status != "FINISHED":
                 c["progress"] = getattr(run, "progress", None)
                 return
-            Fx, Fz, info = forces(s, api, P, c["sim_id"], c["run_id"])
+            try:
+                Fx, Fz, info = forces(s, api, P, c["sim_id"], c["run_id"])
+            except Exception as e:                                       # noqa: BLE001
+                # The run finished but its forces cannot be read. An account that locks results (plan limit,
+                # payment) answers 401/402/403 or a quota message, or lists no results at all: after 3 ticks
+                # of that the key is retired and the car is solved again on the next key.
+                msg, st = f"{type(e).__name__}: {e}"[:300], getattr(e, "status", None)
+                locked = st in (401, 402, 403) or any(w in msg.lower() for w in QUOTA_WORDS) or "no force result among []" in msg
+                if not locked:
+                    raise
+                c["result_blocked"] = c.get("result_blocked", 0) + 1
+                if c["result_blocked"] < 3:
+                    return
+                k = self.st["keys"][c["fp"]]
+                self.st.setdefault("events", []).append({"t": time.time(), "event": "results_blocked", "key": c["fp"],
+                                                         "runs_on_key": k["runs"], "case": cid, "error": msg})
+                self._retire(c["fp"], f"results blocked after {k['runs']} runs: {msg[:120]}")
+                c.update(fp=None, phase="wait", attempt=0, result_blocked=0)
+                return
             sc = 2.0 * (20.0 / self.speed) ** 2                           # half car -> whole car, at 20 m/s
             self.st["cases"].pop(cid)
             self._done[cid] = {"D20_N": Fx * sc, "L20_N": Fz * sc, "ok": True,

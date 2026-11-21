@@ -7,6 +7,7 @@ Results are appended to <out_dir>/results.jsonl as {"tag", "car", "D20_N", "L20_
 Keys come from SIMSCALE_API_KEYS (first key first), never from a file.
 """
 import json
+import os
 import sys
 import time
 from pathlib import Path
@@ -23,7 +24,7 @@ def main():
     import simscale_step_eval as SSE
     car = C.Campaign(HERE / "runs" / "simscale").car
     out.mkdir(parents=True, exist_ok=True)
-    ev = SSE.SimScaleStepEvaluator(car, out / f"state_{tag}.json", runs_per_key=None, speed_mps=20.0, max_cost=80.0,
+    ev = SSE.SimScaleStepEvaluator(car, out / f"state_{tag}.json", runs_per_key=None, speed_mps=20.0, max_cost=float(os.environ.get("VAL_MAX_COST", "80")),
                                    fineness=fineness, box_mm=box_mm, iters=1000, sizing=sizing)
     ids = {f"{tag}_{f.name}": f for f in folders}
     ev.submit([{"id": cid, "folder": str(f)} for cid, f in ids.items() if cid not in ev.st["cases"]])

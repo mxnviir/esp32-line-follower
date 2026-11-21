@@ -1,0 +1,20 @@
+{
+ "D20_half_N": 0.21098408618695494,
+ "wall_s": 1998.5,
+ "converged": true,
+ "residual_p": 0.002668911014324072,
+ "force_osc": 0.04360526318545323,
+ "force_drift": 0.002005355839171376,
+ "run_dir": "",
+ "force_mean_stderr": 0.0016461828459369751,
+ "morph_fallback": false,
+ "folder": "/home/user/esp32-line-follower/research/sidepod_opt/runs/fine_cars/blend50/car",
+ "scheme": "production linearUpwind",
+ "mesh": "fresh",
+ "resolution": "medium",
+ "iterations": 2000,
+ "n_proc": 4,
+ "y_plus_min": 1.8669473091205486,
+ "y_plus_max": 106.59015185698875,
+ "n_cells": 533768
+}

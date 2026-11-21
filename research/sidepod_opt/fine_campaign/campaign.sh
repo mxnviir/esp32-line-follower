@@ -28,7 +28,7 @@ RES=${RES:-fine}; NP=${NP:-4}; JOBS=${JOBS:-1}; ITERS=${ITERS:-3000}; TIMEOUT=${
 PY=${PY:-$(command -v python3)}; OF_BASHRC=${OF_BASHRC:-/usr/lib/openfoam/openfoam2412/etc/bashrc}
 TAG=${TAG:-$RES}; OUT=$PWD/gate_results_$TAG; UP=$PWD/gate_results_${TAG}_up; CARS=$PWD/runs/fine_cars
 mkdir -p "$OUT" "$UP" gate
-source "$OF_BASHRC"
+set +u; source "$OF_BASHRC" || true; set -u          # OpenFOAM's bashrc reads unset variables
 export OF_BASHRC OMPI_ALLOW_RUN_AS_ROOT=1 OMPI_ALLOW_RUN_AS_ROOT_CONFIRM=1 OMPI_MCA_rmaps_base_oversubscribe=1
 LOG=gate/campaign_$TAG.log
 say() { echo "$* $(date -u +%F_%T)" | tee -a "$LOG"; }

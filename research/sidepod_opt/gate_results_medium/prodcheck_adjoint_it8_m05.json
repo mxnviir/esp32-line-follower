@@ -1,0 +1,14 @@
+{
+ "D20_half_N": 0.17621166935026994,
+ "wall_s": 2419.4,
+ "converged": true,
+ "residual_p": 0.002183748502684791,
+ "force_osc": 0.03890749258335624,
+ "force_drift": 0.0007490312051122838,
+ "run_dir": "",
+ "force_mean_stderr": 0.000960380490328668,
+ "morph_fallback": false,
+ "folder": "runs/concepts/it8_m05/car",
+ "scheme": "production linearUpwind",
+ "mesh": "fresh"
+}

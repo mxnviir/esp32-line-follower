@@ -1,0 +1,20 @@
+{
+ "D20_half_N": 0.17811307951960348,
+ "wall_s": 2121.4,
+ "converged": true,
+ "residual_p": 0.002642770924421819,
+ "force_osc": 0.041627800261960085,
+ "force_drift": 0.0001331780789706222,
+ "run_dir": "",
+ "force_mean_stderr": 0.0010805138230639898,
+ "morph_fallback": false,
+ "folder": "runs/concepts/channel_m05/car",
+ "scheme": "production linearUpwind",
+ "mesh": "fresh",
+ "resolution": "medium",
+ "iterations": 2000,
+ "n_proc": 4,
+ "y_plus_min": 1.8278057034067405,
+ "y_plus_max": 118.31701236841194,
+ "n_cells": 524198
+}

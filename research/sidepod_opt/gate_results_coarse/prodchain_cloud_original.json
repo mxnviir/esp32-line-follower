@@ -1,0 +1,16 @@
+{
+ "seed_morph_D20_half_N": 0.17991999892997285,
+ "links": [
+  {
+   "it": 1,
+   "D20_half_N": 0.17306373136962028,
+   "stderr_N": 0.0004921324718429712,
+   "converged": true,
+   "morph_fallback": false,
+   "from": "refA_coarse",
+   "wall_s": 309.1,
+   "change_vs_seed_mN": -6.856267560352569,
+   "change_vs_prev_mN": -6.856267560352569
+  }
+ ]
+}

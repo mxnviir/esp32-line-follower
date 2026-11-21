@@ -44,7 +44,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  PY_DEPS: numpy==2.4.6 scipy==1.17.1 pandas trimesh==5.2.0 scikit-image shapely rtree==1.4.1 mapbox-earcut manifold3d==3.5.4 fast_simplification==0.2.0 jax jaxlib matplotlib pymeshlab==2025.7.post1
+  PY_DEPS: numpy==2.4.6 scipy==1.17.1 pandas trimesh==5.2.0 scikit-image shapely rtree==1.4.1 mapbox-earcut manifold3d==3.5.4 fast_simplification==0.2.0 jax jaxlib matplotlib pymeshlab==2025.7.post1 numba cadquery-ocp
   OMPI_MCA_hwloc_base_use_hwthreads_as_cpus: "1"
   OMPI_MCA_rmaps_base_oversubscribe: "1"
   OMPI_ALLOW_RUN_AS_ROOT: "1"
@@ -69,7 +69,7 @@ jobs:
       NP: ${{ steps.s.outputs.NP }}
     steps:
       - uses: actions/checkout@v4
-        with: { fetch-depth: 2 }   # depth 1 grafts HEAD's parent away, and diff-tree then sees no changes
+        with: { fetch-depth: 0 }   # merge-commit pushes need the full range; .before must exist for the fallback diff
       - id: s
         env:
           EVENT: ${{ github.event_name }}
@@ -94,15 +94,29 @@ jobs:
             exit 0
           fi
           # GitHub leaves .head_commit.added/.modified null in push events, so read what the
-          # triggering commit actually changed from git itself (the checkout above is at HEAD).
+          # triggering commit actually changed from git itself. diff-tree shows nothing for
+          # merge commits (push happens after pulling the cloud session's fixes), so fall
+          # back to the whole push range (github event .before .. HEAD).
           git diff-tree --no-commit-id --name-only -r HEAD > /tmp/commit-changed.txt || true
-          echo "files changed by HEAD ($(git rev-parse --short HEAD)):"; cat /tmp/commit-changed.txt || true
           P=""
           while IFS= read -r f; do
             case "$f" in
               .github/resolved_adjoint_state*) P="$f"; break ;;
             esac
           done < /tmp/commit-changed.txt
+          if [ -z "$P" ]; then
+            B=$(jq -r '.before // empty' "$GITHUB_EVENT_PATH" 2>/dev/null || true)
+            if [ -n "$B" ] && git rev-parse -q --verify "$B^{commit}" >/dev/null 2>&1; then
+              git diff --name-only "$B" HEAD 2>/dev/null || true > /tmp/commit-changed.txt
+              echo "range $B..HEAD:"; cat /tmp/commit-changed.txt
+              while IFS= read -r f; do
+                case "$f" in
+                  .github/resolved_adjoint_state*) P="$f"; break ;;
+                esac
+              done < /tmp/commit-changed.txt
+            fi
+          fi
+          echo "HEAD=$(git rev-parse --short HEAD), state file match: '$P'"
           if [ -z "$P" ] || [ ! -f "$P" ]; then
             out "stage=none"   # cleanup commit: every other job skips
             echo "no live launch state (head commit touched: '$P'); no-op run"
@@ -373,6 +387,14 @@ jobs:
           echo "a1=$A1" >> "$GITHUB_OUTPUT"
           echo "layers=$LAYERS" >> "$GITHUB_OUTPUT"
           [ "$LAYERS" = true ] && [ "$A1" = true ] || echo "STOP: marks L/A1 not both passed; bumps and adjoints will not run (verdict reports this)"
+      - name: keep the steady force history in the committed results
+        working-directory: research/sidepod_opt
+        run: |
+          mkdir -p gate_results_resolved_up/forces/steady
+          f=$(ls gate/refA_resolved_up/postProcessing/forces/*/force.dat 2>/dev/null | tail -1)
+          [ -n "$f" ] && cp "$f" gate_results_resolved_up/forces/steady/forces.dat && echo "steady force history: $(wc -l < gate_results_resolved_up/forces/steady/forces.dat) lines" || echo "no steady force.dat"
+          f=$(ls gate/refA_resolved_up/postProcessing/forces_car/*/force.dat 2>/dev/null | tail -1)
+          [ -n "$f" ] && cp "$f" gate_results_resolved_up/forces/steady/forces_car.dat || true
       - name: release the steady state
         if: steps.done.outputs.layers == 'true' && steps.done.outputs.a1 == 'true'
         run: tar czf steadystate.tgz -C research/sidepod_opt gate/refA_resolved_up gate_results_resolved_up
@@ -610,7 +632,10 @@ jobs:
         working-directory: research/sidepod_opt
         env:
           TURB: ${{ matrix.turb }}
-        run: tar czf ../../esi.tgz gate_results_resolved_up/esi gate_results_resolved_up/resources_esi_"$TURB".json
+        run: |
+          FILES="gate_results_resolved_up/esi gate_results_resolved_up/resources_esi_${TURB}.json"
+          for f in gate/esi_resolved_"$TURB"/log.*; do [ -f "$f" ] && FILES="$FILES $f"; done
+          tar czf ../../esi.tgz $FILES
       - if: steps.solve.outputs.ok == 'true'
         uses: actions/upload-artifact@v4
         with: { name: "esi-${{ matrix.turb }}", path: esi.tgz, retention-days: 14 }

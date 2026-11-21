@@ -971,6 +971,13 @@ external topology case was **not found** in their material (that is not proof it
   - **Design 8 vs team pod on medium: −1.8 ± 0.5 mN (~1 %)** (team 4 meshes, design 8 three clean).
     The coarse mesh said −10.4. **Groove (clean): −4.6 ± 0.3 mN.** On medium the hand-placed groove
     beats the 10-step adjoint design by ~2.8 mN.
+- **2026-11-21 19:00, the team pod (the reference) on a clean repeat mesh: 177.74 mN vs 179.86 on its first mesh.**
+  - Same surface (the campaign's rebuilt team car matches the original within 0.001 mm; only the
+    triangulation differs), so this 2.1 mN is mesh noise on the reference itself. Its earlier spread of
+    0.38 mN came from geometry-nudged copies that happened to agree.
+  - Every comparison is measured against the team pod, so its noise sets every error bar. The groove's
+    −4.6 ± 0.3 and design 8's −1.8 ± 0.5 (17:15, 18:25) are **on hold** until more clean team repeats.
+    Queued first: team~2, team~3 (frame 0.74 / 1.11 mm), then blend 50/75, 5 windows.
 
 ## Sources
 

@@ -94,7 +94,14 @@ jobs:
           fi
           # GitHub leaves .head_commit.added/.modified null in push events, so read what the
           # triggering commit actually changed from git itself (the checkout above is at HEAD).
-          P=$(git diff-tree --no-commit-id --name-only -r HEAD | grep -m1 '^\.github/resolved_adjoint_state' || true)
+          git diff-tree --no-commit-id --name-only -r HEAD > /tmp/commit-changed.txt || true
+          echo "files changed by HEAD ($(git rev-parse --short HEAD)):"; cat /tmp/commit-changed.txt || true
+          P=""
+          while IFS= read -r f; do
+            case "$f" in
+              .github/resolved_adjoint_state*) P="$f"; break ;;
+            esac
+          done < /tmp/commit-changed.txt
           if [ -z "$P" ] || [ ! -f "$P" ]; then
             out "stage=none"   # cleanup commit: every other job skips
             echo "no live launch state (head commit touched: '$P'); no-op run"

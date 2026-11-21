@@ -2,18 +2,18 @@
  "stage": 0,
  "runs": {
   "evolve:cma:original:s1": {
-   "used": 5,
-   "illegal": 2,
+   "used": 6,
+   "illegal": 4,
    "best": 0.7655799385543977
   }
  },
  "inflight": {
-  "c00003": {
+  "c00011": {
    "run": "evolve:cma:original:s1",
    "stage": "evolve"
   }
  },
- "n": 9,
+ "n": 12,
  "log": [],
  "ref:evolve": "c00000"
 }

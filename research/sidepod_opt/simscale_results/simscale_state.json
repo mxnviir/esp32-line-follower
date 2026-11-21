@@ -1,29 +1,23 @@
 {
  "keys": {
   "2f32c2d544": {
-   "runs": 8,
+   "runs": 9,
    "project": "669525764013223556",
    "box": "20ec6925-3540-4c3e-a098-c943271532b4",
    "retired": null
   }
  },
  "cases": {
-  "c00003": {
-   "folder": "runs/simscale/cars/c00003",
-   "phase": "mesh",
+  "c00011": {
+   "folder": "runs/simscale/cars/c00011",
+   "phase": "step",
    "fp": "2f32c2d544",
-   "t0": 1795215643.596087,
-   "attempt": 4,
-   "import_id": "6f3b57d3-a269-48a3-a078-499ce940fc3d",
+   "t0": 1795221028.3600597,
+   "attempt": 1,
+   "import_id": "381bcdc5-8a4a-414a-9a7d-b3916f89e85f",
    "project": "669525764013223556",
-   "geometry_id": "fd858ae2-f645-4d6b-aeca-82e22746a4ee",
-   "sim_id": "5e4fd0e8-66e4-48c0-b1fa-9bf15a33703f",
-   "mesh_op": "adfed7d4-639c-4fea-9c71-2f12cbfb7214",
    "tries": [
-    "4500: mesh FAILED surface-meshing-size-smaller-than-tolerance-no-entities: The meshing failed because the mesh element size is too close to the cad tolerance of some entities. Try to improve (reduce) the model tolerance with your CAD tool, or make the mesh coarser. Otherwise",
-    "5200: mesh FAILED surface-meshing-size-smaller-than-tolerance-no-entities: The meshing failed because the mesh element size is too close to the cad tolerance of some entities. Try to improve (reduce) the model tolerance with your CAD tool, or make the mesh coarser. Otherwise",
-    "3900: mesh FAILED surface-meshing-size-smaller-than-tolerance-with-position: The meshing failed because the mesh element size is too close to the cad tolerance of the following entities: B1_TE527. Position: [{\"X\":0.07166573052574544,\"Y\":-1.602925149384038E-17,\"Z\":0.01671880704",
-    "6000: mesh FAILED surface-meshing-size-smaller-than-tolerance-no-entities: The meshing failed because the mesh element size is too close to the cad tolerance of some entities. Try to improve (reduce) the model tolerance with your CAD tool, or make the mesh coarser. Otherwise"
+    "4500: import FAILED model-has-invalid-geometry ['fault-face-matching_tessellation_failed', 'fault-face-tessellation_failed']"
    ]
   }
  },

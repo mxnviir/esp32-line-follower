@@ -464,6 +464,55 @@ external topology case was **not found** in their material (that is not proof it
     1. fresh-mesh repeatability (one car, 4–5 fresh meshes → σ: the smallest layout effect BO can see);
     2. a wing Reynolds-number check (~20,000 on chord: steady k-ω SST is unreliable for the wings;
        a transient or transition-model run on one wing position).
+- **2026-11-21 06:00, COM: a correction, and how the optimiser handles it.** Earlier I said COM doesn't
+  matter for this car. That was true only at the current design point. A sweep of Part 2's race
+  model at fixed mass and drag (dT in ms; COM x from the nose, z above the track):
+
+  | x \ z | 10 | 16 | 22 | 30 | 40 |
+  |---|---|---|---|---|---|
+  | 60 | +22.0 | +14.9 | +7.9 | 0 | 0 |
+  | 120 | +15.5 | +8.7 | +2.0 | 0 | +4.2 |
+  | 165 (car) | +11.0 | +4.4 | **0** (22.4) | 0 | +8.2 |
+  | 200 | +7.9 | +1.8 | +0.2 | +1.1 | +11.9 |
+  | 245 | +5.5 | +1.6 | +1.8 | +6.9 | +18.1 |
+
+  - The model has a flat zone where COM costs nothing and steep cliffs outside it, worth 4–22 ms
+    (up to ~120 mN of drag). The cliffs are `pitch_balance.axle_loads`: when the thrust line's
+    moment lifts a wheel pair, its tether guide rubs on the line (`mu_guide` 0.25, a placeholder).
+    Their height and position need a guide-friction / track test before they're trusted.
+  - The team car sits on the zone's edge (z 22.4: dropping COM to 16 costs 4.4 ms). Every value is
+    ≥ 0: moving COM only avoids penalties, it never buys time, and extra lead costs 7.5 ms per gram.
+    The zone moves with the layout (axles, wheelbase, thrust line, the halo that carries the ballast
+    container).
+  - **How the optimiser "figures it out":** gradients can't (zero inside the zone, kinked at the
+    edge). The race time evaluation can, and it already decides every step. For route F's outer
+    loop: model **D20 and L20** with the surrogate, then compute race time **exactly** with the JAX
+    race model (exact mass, COM, ballast, layout geometry), so the kinked cliff is never learned,
+    only evaluated. Ballast mass above the floor and `d_halo` become explicit outer variables.
+- **2026-11-21 06:00, thin walls, ribs, windows (owner: designs like an open-lattice pod, not blobs).**
+  - What blocks them in the current loop: σ 4.5 mm smoothing erases 3 mm ribs; the coarse mesh
+    (~3,500 surface points on the car patch) can't resolve them; the level set never opens holes;
+    and the steady model's fine polish wasn't confirmed by production. **The adjoint loop is the
+    wrong engine for this geometry.**
+  - What it needs:
+    - a representation that makes walls, ribs and windows natively: a parametric frame family
+      (skin, window pattern, rib ≥ 3 mm foam or ≥ printer minimum in ABS, windows ≥ 6.35 mm and
+      reachable from a mill set-up) or the CPPN in `design.py`;
+    - a mesh refined in the region (~1 mm or finer, 3–8× the cost);
+    - global search scored by production CFD and exact race time;
+    - a structural check on the ribs (hang test, handling).
+  - Coupling: windows remove foam, lead tops the mass up at the container (z 21), which pulls COM
+    down towards the cliff. Race time catches this automatically.
+  - **Probe A (rules fixed before the result):** the team pod with 3 or 5 vertical through-windows,
+    3 mm ribs and a 3 mm skin (`runs/concepts/win3`, `win5`; pod 49.7 / 49.4 cm³ vs 67.5; ~3 cm³ of
+    window corner refilled by the mill; 3.1 g of lead added). Production, fresh mesh, coarse.
+    Windows help only if race time beats the team pod's by more than 3σ of fresh-mesh scatter
+    (probe B), with drag and lead both counted.
+  - **Probe B:** fresh-mesh repeatability, the team pod on 3 more fresh meshes (with the existing
+    180.85 mN: 4 samples), giving σ.
+  - **Open with the owner:** are the image's pods milled foam or printed? What rib thickness does
+    the team's process achieve (foam 3 mm; printer minimum still a placeholder)? RULES_MAP lists
+    no rule on through-openings in the body.
 
 ## Sources
 

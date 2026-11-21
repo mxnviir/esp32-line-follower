@@ -1,0 +1,13 @@
+{
+ "D20_half_N": 0.23370211452173173,
+ "D20_N": 0.46740422904346346,
+ "L20_N": 0.23052608275231953,
+ "converged": true,
+ "residual_p": 2.200966079015e-05,
+ "force_osc": 0.00036420049974184563,
+ "force_mean_stderr": 5.2245342400572995e-06,
+ "morph_fallback": false,
+ "fresh_mesh": false,
+ "wall_s": 181.9,
+ "div_U": "bounded Gauss upwind"
+}

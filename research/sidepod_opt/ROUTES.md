@@ -604,6 +604,25 @@ external topology case was **not found** in their material (that is not proof it
     their number. To re-check on a finer mesh before treating as final: 3 mm ribs are at the
     coarse mesh's resolution limit.
   - A production-scored global search can resolve ~1.5 mN (≈ 0.3 ms) per design, with no repeats needed.
+- **2026-11-21 07:16, run `cloud_lean` (no-pod seed) STOPPED by the production stop rule.**
+
+  | design | steady D20 whole car | pod | production half car (fresh) |
+  |---|---|---|---|
+  | 0 (no pod) | 493.38 mN | 5.0 cm³ | 206.19 |
+  | 4 | 479.52 | 10.8 | 203.91 |
+  | 7 | 473.66 | 12.5 | 204.30 |
+  | 9 | 469.25 | 14.9 | 204.01 |
+  | 10 | 467.40 (accepted on a reused gradient; it 9's adjoint stalled at 1.9e-3) | | not checked |
+
+  - Steady model: −26.0 mN whole car (−5.3 %) over 10 iterations. Production: −2.2 mN half car
+    by design 4, then flat within the 0.32 mN scatter (203.9, 204.3, 204.0). Two checks without a
+    gain > 1 mN: stopped. The team's pod sits 25 mN below no pod in production; this run recovered 9 %.
+  - **Conclusions from both runs:**
+    - the adjoint loop refines a good pod (−5 % in production from the team's);
+    - it can't create one (a valley lies between no pod and a pod: 50 % blend +6.1 mN);
+    - the steady model's gains on small features don't transfer;
+    - `runs/cloud_lean/` holds the state if anyone wants to resume it (remove `STOP`).
+- **This machine is now idle**, apart from what is started next.
 
 ## Sources
 

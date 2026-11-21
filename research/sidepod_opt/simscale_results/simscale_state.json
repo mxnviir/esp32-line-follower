@@ -1,25 +1,12 @@
 {
  "keys": {
   "2f32c2d544": {
-   "runs": 9,
+   "runs": 10,
    "project": "669525764013223556",
    "box": "20ec6925-3540-4c3e-a098-c943271532b4",
    "retired": null
   }
  },
- "cases": {
-  "c00011": {
-   "folder": "runs/simscale/cars/c00011",
-   "phase": "step",
-   "fp": "2f32c2d544",
-   "t0": 1795221028.3600597,
-   "attempt": 1,
-   "import_id": "381bcdc5-8a4a-414a-9a7d-b3916f89e85f",
-   "project": "669525764013223556",
-   "tries": [
-    "4500: import FAILED model-has-invalid-geometry ['fault-face-matching_tessellation_failed', 'fault-face-tessellation_failed']"
-   ]
-  }
- },
+ "cases": {},
  "done": {}
 }

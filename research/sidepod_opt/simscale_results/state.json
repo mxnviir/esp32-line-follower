@@ -7,12 +7,7 @@
    "best": 0.7655799385543977
   }
  },
- "inflight": {
-  "c00011": {
-   "run": "evolve:cma:original:s1",
-   "stage": "evolve"
-  }
- },
+ "inflight": {},
  "n": 12,
  "log": [],
  "ref:evolve": "c00000"

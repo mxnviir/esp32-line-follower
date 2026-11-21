@@ -31,7 +31,7 @@
    "methods": {
     "cma": {
      "popsize": 8,
-     "sigma": 1.0,
+     "sigma": 0.5,
      "budget": 400,
      "batch": 8,
      "lattice": [
@@ -62,5 +62,6 @@
    }
   }
  ],
- "_rules": "Design rules (CarSpec switches): no virtual cargo; nothing in the sidepod region above 27.175 mm (the team STEP's sidepod top; also used for the T4.4.2 halo cap, which the STEP itself reaches); milled from top and bottom only (3.175 mm ball); 3 mm minimum walls; no loose pieces; sidepod region only."
+ "_rules": "Design rules (CarSpec switches): no virtual cargo; nothing in the sidepod region above 27.175 mm (the team STEP's sidepod top; also used for the T4.4.2 halo cap, which the STEP itself reaches); milled from top and bottom only (3.175 mm ball); 3 mm minimum walls; no loose pieces; sidepod region only.",
+ "_comment_sigma": "sigma halved from 1.0 to 0.5 after generation 1 (its designs were lumpy); the running CMA state was rescaled to match"
 }

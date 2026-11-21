@@ -83,6 +83,11 @@ python simscale_tool.py export /tmp/no_pod --design none    # the car with no si
    export SIMSCALE_API_KEYS='key1,key2,key3'      # comma, space or newline separated; SIMSCALE_API_KEY also works for one
    ```
    Never commit a key or write it into a file in the repo. The state file stores only a 10-character fingerprint of each key (sha256), its project and its run count.
+   **In a Claude Code cloud environment:** open the environment's settings (cloud environment menu in the session's title bar → Edit) and add ONE environment variable, in `.env` format, one line:
+   ```
+   SIMSCALE_API_KEYS=simscale_ak_firstkey,simscale_ak_secondkey,simscale_ak_thirdkey
+   ```
+   No quotes, no spaces, commas between keys. Keep keys that are already used up in the list (the campaign recognises them by fingerprint, knows they are spent, and can still fetch their last results). Do **not** use "Network secrets" for SimScale: those inject one key per host into every request, which would override the per-key rotation.
 3. Check a key with `SIMSCALE_API_KEY=... python simscale_tool.py check`. You should see "SDK ok, API key ok".
 4. Behind an HTTPS proxy (e.g. a cloud container), `HTTPS_PROXY` and `SSL_CERT_FILE` / `REQUESTS_CA_BUNDLE` are passed to the SDK automatically (urllib3 ignores them otherwise). The host `api.simscale.com` must be allowed.
 
@@ -193,7 +198,9 @@ python campaign.py report runs/simscale       # runs.md, convergence.png, best.p
 - Only a geometry that can't be built, or fails all 10 counts, or diverges late in the run, counts as a failed design. CMA scores it as worse than its generation.
 - Finished results stay in `simscale_state.json` (`done`) until the campaign has stored them, so stopping the process mid-collect loses nothing.
 
-**State lives on disk,** so a run can die or be restarted at any point:
+**State lives on disk,** so a run can die or be restarted at any point. `runs/` is not in git: `simscale_results/` holds a committed copy of everything needed to carry on (state files, designs, `x/`, the CMA pickle in `runs/`). On a fresh container, restore it with
+`mkdir -p runs/simscale/runs && cp simscale_results/{state.json,simscale_state.json,designs.jsonl,config.json} runs/simscale/ && cp -r simscale_results/x runs/simscale/ && cp simscale_results/runs/*.pkl runs/simscale/runs/`
+(cars in flight also need their `cars/<id>/body_mm.stl`; when none are in flight nothing else is needed).
 
 | File | Holds |
 |---|---|

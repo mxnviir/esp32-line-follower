@@ -31,7 +31,7 @@
    "methods": {
     "cma": {
      "popsize": 8,
-     "sigma": 1.0,
+     "sigma": 0.5,
      "budget": 400,
      "batch": 8,
      "lattice": [

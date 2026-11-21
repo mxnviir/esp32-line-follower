@@ -623,6 +623,12 @@ external topology case was **not found** in their material (that is not proof it
     - the steady model's gains on small features don't transfer;
     - `runs/cloud_lean/` holds the state if anyone wants to resume it (remove `STOP`).
 - **This machine is now idle**, apart from what is started next.
+- **2026-11-21 07:20, medium-mesh production check queued** (`gate/medium_queue.sh`, results in
+  `gate_results_medium/`): the team pod, the grooved pod, the adjoint design 8, the 3-window pod and
+  no pod, each on a fresh medium mesh (~520 k cells), cold start, 2,000 iterations, 4 cores, ~40 min
+  each. Question: does the coarse ranking (adjoint −10.4, groove −5.5, windows +2.0, no pod +25.3 mN
+  against the team pod) hold on the finer mesh? This is step 1 of "validate the scoring" and the
+  re-check the window verdict was waiting for.
 
 ## Sources
 

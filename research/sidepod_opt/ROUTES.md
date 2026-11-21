@@ -704,7 +704,8 @@ external topology case was **not found** in their material (that is not proof it
     adequate if the team pod's body drag is within 3 mN of medium's 22.0 and both differences
     against the team pod (groove −5.0, design 8 −1.5) are within 2 mN of their medium values.
   - **Cost consequence:** the adjoint on the medium mesh (about 520k cells) doesn't fit this
-    16 GB machine (the 100k-cell coarse adjoint needed swap); it needs the 32 GB+ machine.
+    16 GB machine (the 100k-cell coarse adjoint needed swap). CORRECTED 13:00: it needs ~128 GB, not
+    32 GB (colouring passed 40 GB at 520 k cells; ~150 kB per cell).
 - **2026-11-21 10:45, control B, first half: FAILED its pass mark. Medium-mesh noise is large.**
   - Design 8 on a second medium mesh (field +0.05 mm): **174.26 mN** against 178.32 on the first
     (body 21.6 vs 23.8, wheels 152.7 vs 154.5). Pass mark was "within 1.5 mN"; the gap is 4.1 mN.
@@ -728,6 +729,56 @@ external topology case was **not found** in their material (that is not proof it
     flow switch (separation or wheel-wake state), so tiny mesh changes flip it. A design whose
     drag depends on the mesh draw by 4 mN is not a robust design even if its mean is lower.
   - `gate/medium_table.py` prints every medium result with its body/wheel split and the pooled σ.
+- **2026-11-21 13:00, the fine-mesh campaign (`fine_campaign/`), its pass marks, and how far the coarse conclusions can be trusted.**
+  - **Owner's questions:** a script for everything on a ~5 M-cell mesh; how certain are the coarse-mesh
+    conclusions; could the adjoint setup fail on a detailed mesh.
+  - **Memory, corrected:** the adjoint needs ~150 kB per cell (coarse: 14.4 GB colouring peak at 105 k
+    cells, final product killed on 16 GB; medium: colouring passed 40 GB at 520 k). Medium needs
+    ~128 GB, not "32 GB+" as written at 10:10. Resolved (~5 M) extrapolates to ~0.5–1 TB. Extrapolated
+    until measured.
+  - **Every conclusion graded by the meshes that have tested it:**
+
+    | conclusion | tested on | status |
+    |---|---|---|
+    | DAFoam computes the right gradient of its own model | coarse (bumps on the same mesh, r = 0.98) | holds for the coarse model only; repeat per mesh |
+    | adjoint design 8 is 4.5–5.7 % better | coarse → medium −1.5 to −3.4 mN, scatter 2.9 mN | withdrawn |
+    | early adjoint steps transfer 81–89 % | coarse steady → coarse production | says nothing about reality; withdrawn as a general claim |
+    | a pod beats no pod by ~25 mN | coarse and medium (+24.5) | holds; large margin |
+    | the groove is −5 mN | coarse and medium (2 meshes, spread 0.1) | holds on medium |
+    | windows don't help | coarse and medium (1 mesh, +1.2 ± 1.7) | weak: medium cells (1.4–2.8 mm) put 1–2 cells across a 3 mm rib |
+    | valley between no pod and pod (blend 50 % worse than no pod) | coarse only | untested; it was one reason for the global search |
+    | the adjoint can't grow a pod from nothing | coarse only (run `cloud_lean`) | the method argument (a shape adjoint doesn't create topology) holds; the number doesn't |
+    | the block pod is far worse (+71 mN) | coarse only | very likely holds (margin) |
+    | coarse scatter 0.32 mN, so a search resolves 1.5 mN | coarse | precision, not accuracy: withdrawn |
+    | lift values | coarse vs medium differ by up to 25 mN | race-time effect < 0.1 ms (−0.002 s/N); unimportant |
+    | medium vs fine ranking (Part 2, 20 stress cars) | medium and fine | holds for cars > 3 ms apart (~15 mN); says nothing about 1–5 mN pod details |
+
+    Also: the team pod's total drag agreed between coarse and medium to 1 mN while its body drag fell
+    by 11 mN and its wheel drag rose by 10 mN. Matching totals are therefore not evidence that a mesh is
+    converged; the campaign compares body and wheel drag separately.
+  - **Could the adjoint fail on a detailed mesh? Yes; the specific ways, and the step that settles each:**
+    1. *The steady-model trick.* First-order upwind made the coarse wake steady through numerical
+       diffusion; a finer mesh has less of it, so the wake may go unsteady again and the Krylov
+       adjoint stalls (as it did on the production state). Settled by `steady` (mark A1), medium first.
+    2. *Memory:* above. Settled by `adjoint` on medium (~128 GB) before resolved.
+    3. *Wall-resolved boundary conditions* (kLowReWallFunction, y+ ≤ 2) in DAFoam's own build.
+       Settled by `bccheck`, cheap, on this machine.
+    4. *Morphing a layered mesh:* bumps (and later loop steps) reshape the mesh; ±1 mm against 15 µm
+       first layers may fold cells, and a fall-back fresh mesh voids that bump. Settled by `bumps`
+       (each result records `morph_fallback`).
+    5. *Agreement with the bumps* (mark A2), as on coarse.
+    6. *Even if all pass:* the adjoint optimises the steady model, not the production model. The
+       transfer has to be checked on that mesh, as on coarse.
+  - **Pass marks, fixed now (fine_campaign/README.md has the table):** M1 medium adequate (team body
+    drag within 3 mN of medium; every difference vs team within max(2 mN, 3 SE) of medium's); M2 single
+    runs can score (pooled σ ≤ 2 mN); C1 pod ≥ +15 mN better than no pod; C2 valley (blend 50 % worse
+    than no pod by > 3 SE); C3 groove < −3 SE; C4 windows not better than −3 SE; C5 design 8 not
+    better than −3 SE; A1 steady (100-iteration block means span ≤ 0.10 mN over the last 1,000
+    iterations); A2 as on coarse (r ≥ 0.9, signs on every pair above 3σ); BC DAFoam primal within 2 %
+    of the pipeline. SE = pooled mesh-to-mesh σ × √(1/n₁ + 1/n₂), σ ≥ 0.3 mN.
+  - **Runs on this machine next (after the medium scatter queue):** a plumbing smoke test of every
+    stage on coarse (not committed), `bccheck`, and the medium runs still missing (blend 50/75, 5
+    windows, second meshes of no pod and 3 windows), which make C2 testable on medium.
 
 ## Sources
 

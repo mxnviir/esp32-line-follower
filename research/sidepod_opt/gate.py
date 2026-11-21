@@ -25,8 +25,9 @@ ORIG = G / "original_rm"          # the same surface re-meshed to even 1 mm tria
 DOMAIN = ((-0.005, 0.0, 0.0), (0.265, 0.045, 0.066))      # fixed for every car (trial car is 257 mm)
 # GATE_RES=coarse runs the same test on Part 2's coarse mesh (with GATE_RESULTS pointing elsewhere), e.g.
 # for the DAFoam test, whose adjoint memory (>150 kB/cell) does not fit the medium mesh on 16 GB
-RES, ITERS_BASE, ITERS = os.environ.get("GATE_RES", "medium"), 2000, 1000
-REF_A = G / ("refA" if RES == "medium" else f"refA_{RES}")
+RES = os.environ.get("GATE_RES", "medium")
+ITERS_BASE, ITERS = int(os.environ.get("GATE_ITERS_BASE", 2000)), int(os.environ.get("GATE_ITERS", 1000))
+REF_A = Path(os.environ["GATE_REF"]) if os.environ.get("GATE_REF") else G / ("refA" if RES == "medium" else f"refA_{RES}")
 BUMP_R_M, BUMP_A_M = 0.010, 0.001                           # Part 3: 10 mm radius, 1 mm height
 # centres in the car frame (m): x from the nose, z up; y on the +y side. Front/attached vs rear/wake.
 CENTRES = {"nose_top": (0.030, 0.000, 0.022), "nose_side": (0.040, 0.008, 0.019),
@@ -38,6 +39,10 @@ CENTRES = {"nose_top": (0.030, 0.000, 0.022), "nose_side": (0.040, 0.008, 0.019)
 def kw(extra=None):
     import stopwatch as SW
     k = dict(SW.SEARCH, domain_reference_bounds=DOMAIN, resolution=RES)
+    if os.environ.get("GATE_TIMEOUT"):                     # seconds per OpenFOAM stage (fine/resolved meshes)
+        k["stage_timeout_s"] = int(os.environ["GATE_TIMEOUT"])
+    if os.environ.get("GATE_WALL_RESOLVED") == "1":        # wall-resolved layer stack on any resolution
+        k["wall_resolved"] = True
     k.update(extra or {})
     return k
 

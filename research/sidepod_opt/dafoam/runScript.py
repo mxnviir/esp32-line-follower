@@ -95,6 +95,11 @@ def main():
     t1 = time.time()
     if gcomm.rank == 0:
         print(f"DAFOAM primal D_half = {D:.6f} N  ({t1 - t0:.0f} s)", flush=True)
+    if os.environ.get("DAF_PRIMAL_ONLY") == "1":          # boundary-condition / steadiness check, no adjoint
+        if gcomm.rank == 0:
+            json.dump({"D_half_N": D, "primal_s": t1 - t0, "nproc": gcomm.size, "primal_only": True},
+                      open("dafoam_primal.json", "w"), indent=1)
+        return
     tot = prob.compute_totals(of=["cruise.aero_post.D"], wrt=["mesh.x_aero0"], get_remote=True)
     g = np.asarray(tot[("cruise.aero_post.D", "mesh.x_aero0")]).ravel()
     t2 = time.time()

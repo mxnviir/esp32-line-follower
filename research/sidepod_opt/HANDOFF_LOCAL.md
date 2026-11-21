@@ -407,3 +407,20 @@ does it converge steadily, and does GMRES still converge on it?
 | `part2-simulation/README.md`, `PROOF.md`, `CODESPACES.md` | the CFD: resolutions, noise, frozen states, earlier codespace use |
 | `part3-simulation/README.md` | the compass and its known-answer tests |
 | `part1-…/part5-…/README.md` | each part's modules |
+
+## Addendum 2026-11-21 13:00: the fine-mesh campaign (read before any long run)
+
+- **What changed today:** the adjoint design's coarse-mesh gain (−10 mN half car) is −1.5 to −3.4 mN
+  on the medium mesh; control runs show the coarse mesh invents ~10 mN of body pressure drag that the
+  adjoint optimised away. **Do not run design loops or score designs on the coarse mesh.** ROUTES.md
+  2026-11-21 09:30–13:00 has the evidence and the graded list of what still holds.
+- **The campaign:** `research/sidepod_opt/fine_campaign/` (README.md there: order, machine sizes,
+  pass marks). One resumable launcher, `campaign.sh <stage>`, with RES / NP / JOBS / ITERS / OF_BASHRC /
+  PY. It rebuilds every test car from code (`make_cars.py`), commits and pushes after each job.
+- **Order:** `cars` → `bccheck` (any machine) → medium `steady`/`bumps`/`adjoint`/`judge` (adjoint
+  needs ~128 GB) → fine `stage0` then `forward` → resolved `stage0` then `forward` → resolved adjoint
+  ladder only if medium's passed (~0.5–1 TB). Stop after each `stage0` and check cells / y+ / memory /
+  time against the README before paying for the rest.
+- **Already running in the cloud session (owner's machine need not repeat):** smoke test of every
+  stage on coarse, `bccheck`, and the medium runs that were missing (blend 50/75, 5 windows, second
+  meshes of no pod and 3 windows).

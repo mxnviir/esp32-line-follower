@@ -69,7 +69,7 @@ jobs:
       NP: ${{ steps.s.outputs.NP }}
     steps:
       - uses: actions/checkout@v4
-        with: { fetch-depth: 2 }   # depth 1 grafts HEAD's parent away, and diff-tree then sees no changes
+        with: { fetch-depth: 0 }   # merge-commit pushes need the full range; .before must exist for the fallback diff
       - id: s
         env:
           EVENT: ${{ github.event_name }}
